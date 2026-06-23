@@ -1,0 +1,29 @@
+#!/bin/bash -l
+
+#$ -N mPPIseq_dict_03_align
+#$ -j y
+#$ -V
+#$ -q all.q@compute-0-0,all.q@compute-0-1
+#$ -pe serial 32
+#$ -m ae
+#$ -M tyu7@bwh.harvard.edu
+#$ -wd /net/bgm/sherwood/PPIseq_proj
+#$ -o /net/bgm/sherwood/PPIseq_proj/job_out
+
+# Step 03 — align extracted oligo FASTA to block reference sequences
+# (bowtie2 --local --very-sensitive-local) -> sorted BAM per block.
+
+source /net/bgm/sherwood/PPIseq_proj/multiPPIseq_DMS_central/qsub/dict_build/config.sh
+source "$CONDA_BASE/bin/activate" "$ENV_MAIN"
+
+mkdir -p "$BAM_PATH"
+for f in "$PROCESSED_FA_PATH"/*.fasta.gz; do
+	f2=$(basename "$f" .fasta.gz)
+	sam_prefix=${f2}.block_ref_seqs
+	bowtie2 -p $(($NUM_THREADS / 3)) --local --very-sensitive-local --no-unal \
+		-x "$BOWTIE2_INDEX" -f "$f" \
+		| samtools view -@ $(($NUM_THREADS / 3)) -bS - \
+		| samtools sort -@ $(($NUM_THREADS / 3)) - -o "$BAM_PATH/${sam_prefix}.bam"
+done
+
+echo "align done -> $BAM_PATH"

@@ -1,0 +1,32 @@
+#!/bin/bash -l
+
+#$ -N mPPIseq_dict_04_varmap
+#$ -j y
+#$ -V
+#$ -q all.q@compute-0-0,all.q@compute-0-1
+#$ -pe serial 32
+#$ -m ae
+#$ -M tyu7@bwh.harvard.edu
+#$ -wd /net/bgm/sherwood/PPIseq_proj
+#$ -o /net/bgm/sherwood/PPIseq_proj/job_out
+
+# Step 04 — map each aligned read to a known variant (step2.py)
+# -> per-block barcode<->variant CSV (read level).
+
+source /net/bgm/sherwood/PPIseq_proj/multiPPIseq_DMS_central/qsub/dict_build/config.sh
+source "$CONDA_BASE/bin/activate" "$ENV_MAIN"
+
+rm -f "$BAM_PATH"/*.bai
+mkdir -p "$VARIANT_MAPPED_PATH/blocks"
+for f in "$BAM_PATH"/*.bam; do
+	f2=$(basename "$f" .bam)
+	python "$SCRIPT_PATH/multiPPIseq_DMS_dict_build_step2.py" \
+		"$f" \
+		"$BLOCK_REF_FA" \
+		"$VARIANT_LIB" \
+		--out "$VARIANT_MAPPED_PATH/blocks/${f2}.csv.gz" \
+		&
+done
+wait
+
+echo "variant map done -> $VARIANT_MAPPED_PATH/blocks"

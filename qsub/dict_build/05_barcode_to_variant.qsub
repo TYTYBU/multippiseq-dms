@@ -1,0 +1,80 @@
+#!/bin/bash -l
+
+#$ -N mPPIseq_dict_05_bc2var
+#$ -j y
+#$ -V
+#$ -q all.q@compute-0-0,all.q@compute-0-1
+#$ -pe serial 32
+#$ -m ae
+#$ -M tyu7@bwh.harvard.edu
+#$ -wd /net/bgm/sherwood/PPIseq_proj
+#$ -o /net/bgm/sherwood/PPIseq_proj/job_out
+
+# Step 05 — collapse read-level variant maps into a barcode->variant
+# dictionary (step3.py), with read-support / accuracy thresholds.
+# Produces (a) per-block dictionaries and (b) per-gene dictionaries
+# (blocks of a gene concatenated, then collapsed).
+
+source /net/bgm/sherwood/PPIseq_proj/multiPPIseq_DMS_central/qsub/dict_build/config.sh
+source "$CONDA_BASE/bin/activate" "$ENV_MAIN"
+
+# --- (a) per-block dictionaries ---------------------------------------
+# Per-block thresholds come from DICT_PARAMS_CSV when present; otherwise the
+# global MIN_SUPPORT_READS/MIN_ACCURACY apply to every block.
+mkdir -p "$BC2VAR_PATH/blocks"
+for f in "$VARIANT_MAPPED_PATH"/blocks/*.block_ref_seqs.csv.gz; do
+	f2=$(basename "$f" _Dictionary.block_ref_seqs.csv.gz)   # e.g. RAD51C_DMS_1
+	sup="$MIN_SUPPORT_READS"
+	fid="$MIN_ACCURACY"
+	if [ -f "$DICT_PARAMS_CSV" ]; then
+		gene=${f2%%_DMS_*}
+		blk=${f2##*_DMS_}
+		# CSV cols: Gene,Block_number,proposed_fidelity_cutoff,proposed_support_read_cutoff.
+		# gsub strips CR/BOM so CRLF- or BOM-encoded CSVs parse cleanly.
+		row=$(awk -F, -v g="$gene" -v b="$blk" '{gsub(/\r/,""); gsub(/^\xef\xbb\xbf/,"",$1)} NR>1 && $1==g && $2==b {print $4"\t"$3; exit}' "$DICT_PARAMS_CSV")
+		if [ -z "$row" ]; then
+			echo "WARNING: no params row for $f2 in $DICT_PARAMS_CSV; skipping"
+			continue
+		fi
+		sup=$(printf '%s' "$row" | cut -f1)
+		fid=$(printf '%s' "$row" | cut -f2)
+	fi
+	echo "Block $f2: min_support_reads=$sup min_accuracy=$fid"
+	python "$SCRIPT_PATH/multiPPIseq_DMS_dict_build_step3.py" \
+		--variant_map_in "$f" \
+		--raw_dict_out "$BC2VAR_PATH/blocks/${f2}.raw_dict.csv.gz" \
+		--out "$BC2VAR_PATH/blocks/${f2}.barcode_to_variant.csv.gz" \
+		$IGNORE_BC \
+		--min_support_reads "$sup" \
+		--min_accuracy "$fid" \
+		--jobs "$NUM_THREADS"
+done
+
+# --- (b) merge blocks per gene, then build per-gene dictionary ---------
+# Skipped while BLOCK_LEVEL_ONLY=1 (Dual_NEBuilder step3 params still being explored).
+if [ "${BLOCK_LEVEL_ONLY:-0}" = "1" ]; then
+	echo "BLOCK_LEVEL_ONLY=1 -> per-block dictionaries only; skipping per-gene merge."
+	echo "barcode->variant dictionaries (block level) done -> $BC2VAR_PATH/blocks"
+	exit 0
+fi
+
+for gene in $GENES; do
+	files=$(ls "$VARIANT_MAPPED_PATH"/blocks/*${gene}_DMS* 2>/dev/null)
+	[ -z "$files" ] && { echo "no blocks for $gene, skipping"; continue; }
+	cat $files > "$VARIANT_MAPPED_PATH/${gene}_DMS_Dictionary.csv.gz"
+done
+
+mkdir -p "$BC2VAR_PATH"
+for f in "$VARIANT_MAPPED_PATH"/*_DMS_Dictionary.csv.gz; do
+	f2=$(basename "$f" _DMS_Dictionary.csv.gz)
+	python "$SCRIPT_PATH/multiPPIseq_DMS_dict_build_step3.py" \
+		--variant_map_in "$f" \
+		--raw_dict_out "$BC2VAR_PATH/${f2}.raw_dict.csv.gz" \
+		--out "$BC2VAR_PATH/${f2}.barcode_to_variant.csv.gz" \
+		$IGNORE_BC \
+		--min_support_reads "$MIN_SUPPORT_READS" \
+		--min_accuracy "$MIN_ACCURACY" \
+		--jobs "$NUM_THREADS"
+done
+
+echo "barcode->variant dictionaries done -> $BC2VAR_PATH"

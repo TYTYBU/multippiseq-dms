@@ -1,0 +1,17 @@
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+
+# Regenerable bowtie2 index — rebuild from the committed .fa with:
+#   bowtie2-build ref/dict_build/block_ref_seqs_061626.fa \
+#                 ref/dict_build/bowtie2_index/block_ref_seqs_061626
+ref/dict_build/bowtie2_index/
+
+# Editor / OS cruft
+.DS_Store
+*.swp
+*~
+
+# Analysis-plan local version snapshots (skill scratch)
+analysis_plan/.duckversions/

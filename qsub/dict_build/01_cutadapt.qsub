@@ -1,0 +1,31 @@
+#!/bin/bash -l
+
+#$ -N mPPIseq_dict_01_cutadapt
+#$ -j y
+#$ -V
+#$ -q all.q@compute-0-0,all.q@compute-0-1
+#$ -pe serial 32
+#$ -m ae
+#$ -M tyu7@bwh.harvard.edu
+#$ -wd /net/bgm/sherwood/PPIseq_proj
+#$ -o /net/bgm/sherwood/PPIseq_proj/job_out
+
+# Step 01 — adapter trimming (OPTIONAL; run only if 00_fastqc flags adapter
+# read-through). Outputs *_R{1,2}.noAdapter.fastq.gz. After running this,
+# set USE_NOADAPTER=1 (in config.sh or via `qsub -v USE_NOADAPTER=1`) so
+# step 02 reads the trimmed reads.
+
+source /net/bgm/sherwood/PPIseq_proj/multiPPIseq_DMS_central/qsub/dict_build/config.sh
+source "$CONDA_BASE/bin/activate" "$ENV_CUTADAPT"
+
+mkdir -p "$NOADAPTER_PATH"
+for f in "$RAW_PATH"/*_R1.fastq.gz; do
+	f2=$(basename "$f" _R1.fastq.gz)
+	cutadapt -j "$NUM_THREADS" \
+		-a "$CUTADAPT_ADAPTER" -A "$CUTADAPT_ADAPTER" -m 20 \
+		-o "$NOADAPTER_PATH/${f2}_R1.noAdapter.fastq.gz" \
+		-p "$NOADAPTER_PATH/${f2}_R2.noAdapter.fastq.gz" \
+		"$f" "$RAW_PATH/${f2}_R2.fastq.gz"
+done
+
+echo "cutadapt done -> $NOADAPTER_PATH (remember to set USE_NOADAPTER=1 for step 02)"

@@ -1,0 +1,29 @@
+#!/bin/bash -l
+
+#$ -N mPPIseq_dict_08_hist
+#$ -j y
+#$ -V
+#$ -q all.q@compute-0-0,all.q@compute-0-1
+#$ -pe serial 16
+#$ -m ae
+#$ -M tyu7@bwh.harvard.edu
+#$ -wd /net/bgm/sherwood/PPIseq_proj
+#$ -o /net/bgm/sherwood/PPIseq_proj/job_out
+
+# Step 08 — read-support distribution per unique barcode (histogram + summary),
+# to quantify under-sequencing. Keys on bc1 only (IGNORE_BC from config, the
+# committed Dual_NEBuilder design).
+
+source /net/bgm/sherwood/PPIseq_proj/multiPPIseq_DMS_central/qsub/dict_build/config.sh
+source "$CONDA_BASE/bin/activate" "$ENV_MAIN"
+
+OUT_DIR="$STATS_PATH/support_hist"
+mkdir -p "$OUT_DIR"
+
+python "$SCRIPT_PATH/multiPPIseq_DMS_dict_support_hist.py" \
+	--variant_mapped_dir "$VARIANT_MAPPED_PATH/blocks" \
+	--out_prefix "$OUT_DIR/support_hist" \
+	$IGNORE_BC \
+	--xmax 30
+
+echo "support histogram done -> $OUT_DIR"

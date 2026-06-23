@@ -1,0 +1,33 @@
+#!/bin/bash -l
+
+#$ -N mPPIseq_dict_07_sweep
+#$ -j y
+#$ -V
+#$ -q all.q@compute-0-0,all.q@compute-0-1
+#$ -pe serial 32
+#$ -m ae
+#$ -M tyu7@bwh.harvard.edu
+#$ -wd /net/bgm/sherwood/PPIseq_proj
+#$ -o /net/bgm/sherwood/PPIseq_proj/job_out
+
+# Step 07 — sweep step-05 thresholds (min_support_reads x min_accuracy) and record
+# dictionary yield (read + barcode-pair retention) -> single CSV. Parameter-tuning
+# aid; does not write dictionaries. Uses IGNORE_BC from config (bc1-only, committed).
+
+source /net/bgm/sherwood/PPIseq_proj/multiPPIseq_DMS_central/qsub/dict_build/config.sh
+source "$CONDA_BASE/bin/activate" "$ENV_MAIN"
+
+mkdir -p "$STATS_PATH"
+OUT_CSV="$STATS_PATH/dict_param_sweep_bc1.csv"
+SUPPORT_VALUES="${SUPPORT_VALUES:-1 2 3 5 10}"
+ACCURACY_VALUES="${ACCURACY_VALUES:-0.6 0.7 0.8 0.9 1.0}"
+
+python "$SCRIPT_PATH/multiPPIseq_DMS_dict_sweep.py" \
+	--variant_mapped_dir "$VARIANT_MAPPED_PATH/blocks" \
+	--out "$OUT_CSV" \
+	--support_values $SUPPORT_VALUES \
+	--accuracy_values $ACCURACY_VALUES \
+	$IGNORE_BC \
+	--jobs "$NUM_THREADS"
+
+echo "dict param sweep done -> $OUT_CSV"

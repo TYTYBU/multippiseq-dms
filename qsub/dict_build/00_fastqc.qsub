@@ -1,0 +1,23 @@
+#!/bin/bash -l
+
+#$ -N mPPIseq_dict_00_fastqc
+#$ -j y
+#$ -V
+#$ -q all.q@compute-0-0,all.q@compute-0-1
+#$ -pe serial 16
+#$ -m ae
+#$ -M tyu7@bwh.harvard.edu
+#$ -wd /net/bgm/sherwood/PPIseq_proj
+#$ -o /net/bgm/sherwood/PPIseq_proj/job_out
+
+# Step 00 — FastQC on raw reads.
+# Inspect the reports (esp. "Overrepresented sequences" / "Adapter Content")
+# to decide whether step 01 (cutadapt) is needed for this batch.
+
+source /net/bgm/sherwood/PPIseq_proj/multiPPIseq_DMS_central/qsub/dict_build/config.sh
+source "$CONDA_BASE/bin/activate" "$ENV_MAIN"
+
+mkdir -p "$FASTQC_PATH"
+fastqc -t 16 -o "$FASTQC_PATH" "$RAW_PATH"/*.fastq.gz
+
+echo "FastQC done -> $FASTQC_PATH"

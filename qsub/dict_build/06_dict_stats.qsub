@@ -1,0 +1,30 @@
+#!/bin/bash -l
+
+#$ -N mPPIseq_dict_06_stats
+#$ -j y
+#$ -V
+#$ -q all.q@compute-0-0,all.q@compute-0-1
+#$ -pe serial 16
+#$ -m ae
+#$ -M tyu7@bwh.harvard.edu
+#$ -wd /net/bgm/sherwood/PPIseq_proj
+#$ -o /net/bgm/sherwood/PPIseq_proj/job_out
+
+# Step 06 — per-block dictionary-build diagnostic stats (Python port of
+# DMS_dict_stats.pl) -> single CSV under barcode_to_variant/<LIBTYPE>/.
+
+source /net/bgm/sherwood/PPIseq_proj/multiPPIseq_DMS_central/qsub/dict_build/config.sh
+source "$CONDA_BASE/bin/activate" "$ENV_MAIN"
+
+mkdir -p "$STATS_PATH"
+OUT_CSV="$STATS_PATH/dict_stats.csv"
+
+python "$SCRIPT_PATH/multiPPIseq_DMS_dict_stats.py" \
+	--raw_dir "$RAW_PATH" \
+	--processed_fa_dir "$PROCESSED_FA_PATH" \
+	--variant_mapped_dir "$VARIANT_MAPPED_PATH/blocks" \
+	--blocks_dir "$BC2VAR_PATH/blocks" \
+	--out "$OUT_CSV" \
+	--jobs "$NUM_THREADS"
+
+echo "dict stats done -> $OUT_CSV"

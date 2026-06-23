@@ -1,0 +1,45 @@
+#!/bin/bash -l
+
+#$ -N mPPIseq_dict_02_extract
+#$ -j y
+#$ -V
+#$ -q all.q@compute-0-0,all.q@compute-0-1
+#$ -pe serial 32
+#$ -m ae
+#$ -M tyu7@bwh.harvard.edu
+#$ -wd /net/bgm/sherwood/PPIseq_proj
+#$ -o /net/bgm/sherwood/PPIseq_proj/job_out
+
+# Step 02 — extract bc1 / bc2 / oligo from paired reads -> FASTA (step1_v2.py).
+# Reads raw reads, or trimmed reads if USE_NOADAPTER=1.
+# bc2 is delimited in "range" mode (BC2_MIN/MAX_LEN + R1_POST_BC2 anchor);
+# the r1_barcode2 library is intentionally NOT used here.
+
+source /net/bgm/sherwood/PPIseq_proj/multiPPIseq_DMS_central/qsub/dict_build/config.sh
+source "$CONDA_BASE/bin/activate" "$ENV_MAIN"
+
+if [ "$USE_NOADAPTER" = "1" ]; then
+	IN_DIR=$NOADAPTER_PATH; R1_SUF=_R1.noAdapter.fastq.gz; R2_SUF=_R2.noAdapter.fastq.gz
+else
+	IN_DIR=$RAW_PATH;       R1_SUF=_R1.fastq.gz;            R2_SUF=_R2.fastq.gz
+fi
+
+mkdir -p "$PROCESSED_FA_PATH"
+for f in "$IN_DIR"/*"$R1_SUF"; do
+	f2=$(basename "$f" "$R1_SUF")
+	python "$SCRIPT_PATH/multiPPIseq_DMS_dict_build_step1_v2.py" \
+		--r1_fastq "$f" \
+		--r2_fastq "$IN_DIR/${f2}${R2_SUF}" \
+		--r1_linker "$R1_LINKER" \
+		--r2_fixed_seq_lib "$R2_FIXED_SEQ_LIB" \
+		--bc1_min_len "$BC1_MIN_LEN" \
+		--bc1_max_len "$BC1_MAX_LEN" \
+		--bc2_min_len "$BC2_MIN_LEN" \
+		--bc2_max_len "$BC2_MAX_LEN" \
+		--r1_post_bc2 "$R1_POST_BC2" \
+		--out "$PROCESSED_FA_PATH/${f2}.fasta.gz" \
+		&
+done
+wait
+
+echo "extract done -> $PROCESSED_FA_PATH"
