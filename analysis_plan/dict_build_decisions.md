@@ -4,6 +4,24 @@ Dated, append-only. Newest entries on top. One entry per real decision.
 
 ---
 
+## 2026-06-23 — Step-09 scatter stays parameter-agnostic (it *selects* the parameters)
+
+**Context.** While wiring per-block thresholds I briefly made step 09 draw each block's
+chosen cutoff (from `dictionary_parameters.csv`) as its threshold box. That inverts the
+workflow: the support×fidelity scatter is the **input** Tian uses to *choose* the per-block
+cutoffs, so drawing the decided cutoffs back onto it is circular and misleading.
+
+**Decision.** Step 09 is produced **independently of the decided parameters**. Reverted the
+`--params_csv` per-block-box feature (removed from the script and `09_support_accuracy_scatter.qsub`).
+The dashed reference lines are a generic reading guide only (script defaults 3 × 0.9); the
+qsub no longer passes any chosen thresholds. The scatter is run first; per-block cutoffs are
+read off it and recorded in `dictionary_parameters.csv`.
+
+**Status / pointer.** Applied. Scatter regenerated parameter-agnostic. Methods file Step 09
+re-labeled "parameter selection" and notes the independence explicitly.
+
+---
+
 ## 2026-06-23 — Per-block dictionary thresholds from CSV; pilot block dicts regenerated
 
 **Context.** With bc1-only committed, the pilot needed real per-block support/fidelity

@@ -178,23 +178,25 @@ output location. All step 06–09 outputs live under `barcode_to_variant/<LIBTYP
   step measures the read-support depth per bc1. (Pilot ALL: ~214k unique bc1, bimodal — ~90k
   singletons vs ~70k with ≥31 reads.)
 
-### Step 09 — Per-barcode support × fidelity scatter (QC; optional)
+### Step 09 — Per-barcode support × fidelity scatter (parameter selection; optional)
 - **Inputs:** step-04 `variant_mapped/<LIBTYPE>/blocks` per-read CSVs only.
 - **Method:** `multiPPIseq_DMS_dict_support_accuracy_scatter.py` (`09_support_accuracy_scatter.qsub`).
   Reuses the step3 load+redistribute (so per-barcode numbers match the dictionary), then for
   every barcode plots one dot on log2–log2 axes: x = support reads of the max-support variant
   (`best_ct`), y = fidelity (`best_ct/total_ct`). Dots are colored by local barcode density
-  (an 80×80 log2 `histogram2d`; raw overplotting would be unreadable). The current step-05
-  threshold box (`MIN_SUPPORT_READS` × `MIN_ACCURACY`) is drawn for reference. Tie barcodes
-  are kept for the cloud but flagged via `n_tie` in the CSV (`--drop_ties` to exclude). Uses
-  `IGNORE_BC` (bc1-only).
+  (an 80×80 log2 `histogram2d`; raw overplotting would be unreadable). Tie barcodes are kept
+  for the cloud but flagged via `n_tie` in the CSV (`--drop_ties` to exclude). Uses `IGNORE_BC`
+  (bc1-only). **This plot is produced independently of the chosen parameters** — the dashed
+  reference lines (`--min_support`/`--min_accuracy`, default 3 × 0.9) are a generic reading
+  guide, *not* the per-block cutoffs. The per-block `dictionary_parameters.csv` values were
+  **chosen by inspecting this scatter**, so drawing them back onto it would be circular.
 - **Output:** under `barcode_to_variant/<LIBTYPE>/stats/support_accuracy_scatter/`:
   `support_accuracy.perbarcode.csv.gz` (`block, bc_pair, best_ct, total_ct, accuracy, n_tie`)
   and per-block + `ALL` PNG scatters.
-- **Rationale:** visually assess where the barcode mass sits relative to any threshold box.
-  Pilot bc1-only: the cloud sits at high support but low fidelity (reads smeared across many
-  variants per bc1); some blocks (e.g. RAD51D_DMS_8) are bimodal in fidelity, reflecting two
-  bc1 collision-multiplicity populations (~6 vs ~tens of variants per bc1).
+- **Rationale:** read off, per block, where the barcode mass sits so support/fidelity cutoffs
+  can be picked. Pilot bc1-only: the cloud sits at high support but low fidelity (reads smeared
+  across many variants per bc1); some blocks (e.g. RAD51D_DMS_8) are bimodal in fidelity,
+  reflecting two bc1 collision-multiplicity populations (~6 vs ~tens of variants per bc1).
 
 ## Notes
 - `--ignore_bc2` (bc1-only) is the **committed Dual_NEBuilder design**, not a defect; the
