@@ -36,8 +36,7 @@ for batch in $EDITRATE_BATCHES; do
 	echo "$batch: $((${#reports[@]})) rep(s) -> $out_csv"
 	python "$SCRIPT_PATH/extract_cDNA_run_stats.py" \
 		"$combined" \
-		--out_csv "$out_csv" \
-		--out_xlsx "${out_csv%.csv}.xlsx"
+		--out_csv "$out_csv"
 done
 
 echo "cDNA run-stats done."

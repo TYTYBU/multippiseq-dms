@@ -10,8 +10,8 @@
   `cDNA_parse_step2_allPos.py`, `extract_cDNA_run_stats.py`). Applies a barcode→variant
   dictionary (part 1 output) to cDNA reads and counts base edits per variant.
 - **Output:** per batch, a **separate** pilot folder `data/<batch>/<OUT_SUBDIR>/`
-  (default `cDNA_parsed_dictPilot062626/`) with one `<rep>.cDNA_parsed.txt` per rep
-  (variant × edit-position count table) plus a `cDNA_diagnosis_stats_*.csv`/`.xlsx`.
+  (default `cDNA_parsed_dictPilot062626/`) with one `<rep>.cDNA_parsed.csv` per rep
+  (variant × edit-position count table) plus a `cDNA_diagnosis_stats_*.csv`.
   The canonical `cDNA_parsed/` and any existing stats files are left untouched.
 - **Locked parameters:** bc1-only (`--ignore_bc2`); `EDIT_MODE=T2C`;
   `TEMPLATE_SEQ=TATCATAC…TGTAGTACC`; `R1_POST_BC2=ACCTTTCGACCTGCA`;
@@ -41,9 +41,9 @@
      (start/end regex of `REGEX_MATCH_LEN`), require extracted cDNA == template length, read
      bc1 upstream of the template and call edits at each ref-base (T) position; match the read's
      bc1 (via the alt table) to the dictionary and credit the read to **all** variants that bc1
-     maps to. Writes `<rep>.cDNA_parsed.txt`; prints one `Report_line` to stdout, captured under
+     maps to. Writes `<rep>.cDNA_parsed.csv`; prints one `Report_line` to stdout, captured under
      `WORK_PATH/reports/<batch>/<rep>.report.txt`.
-- **Output:** `data/<batch>/<OUT_SUBDIR>/<rep>.cDNA_parsed.txt` — columns
+- **Output:** `data/<batch>/<OUT_SUBDIR>/<rep>.cDNA_parsed.csv` — columns
   `Outcome  Total_reads  Is_edited  Any_edit_ct  Pos<N>…` (one row per variant, one Pos column
   per editable template position).
 - **Rationale:** edits are scored at every template T position so per-position editing can be
@@ -54,7 +54,7 @@
 - **Method:** `extract_cDNA_run_stats.py` summarizes per rep; written **per batch** (rep
   basenames repeat across batches, so one CSV each avoids index collisions). Chain after
   step 01 with `qsub -hold_jid <01_jobid>`.
-- **Output:** `data/<batch>/<OUT_SUBDIR>/cDNA_diagnosis_stats_dictPilot062626.csv` (+ `.xlsx`):
+- **Output:** `data/<batch>/<OUT_SUBDIR>/cDNA_diagnosis_stats_dictPilot062626.csv`:
   Total reads, Reads with barcode matched, Reads with template matched, Reads with barcode and
   template matched, Unique barcodes in cDNA samples, Unique barcodes matched in dictionary.
 - **Rationale:** QC of *applying* the dictionary to cDNA — distinct from the dictionary-**build**

@@ -61,7 +61,7 @@ for batch in $EDITRATE_BATCHES; do
 			--cDNA_in "$f" \
 			--dict_in "$DICT_FILE" \
 			--bc_alt_prefix "$TEMP_DIR/$SAMPLE" \
-			--out "$OUT/${f2}.cDNA_parsed.txt" \
+			--out "$OUT/${f2}.cDNA_parsed.csv" \
 			--edit_mode "$EDIT_MODE" \
 			--template_seq "$TEMPLATE_SEQ" \
 			--regex_match_len "$REGEX_MATCH_LEN" \

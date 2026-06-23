@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Parse cDNA run stats from a job output file and produce a summary CSV (and
-optionally XLSX) matching the format of cDNA_diagnosis_stats.xlsx.
+Parse cDNA run stats from a job output file and produce a summary CSV.
 
 Each Report_line in the job output is tab-separated:
     Report_line  <filepath>  Reads_total  <N>  Reads_barcode_matched  <N>
@@ -10,12 +9,10 @@ Each Report_line in the job output is tab-separated:
                  Barcodes  <N>  Barcodes_matched  <N>
 
 Usage:
-    python parse_cDNA_run_stats.py <job_output_file>
-                                   [--out_csv  <output.csv>]
-                                   [--out_xlsx <output.xlsx>]
+    python extract_cDNA_run_stats.py <job_output_file> [--out_csv <output.csv>]
 
-If --out_csv / --out_xlsx are not supplied the output files are written next
-to the job output file with the same stem.
+If --out_csv is not supplied the CSV is written next to the job output file
+with the same stem.
 """
 
 import argparse
@@ -105,26 +102,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("job_output_file", help="Path to the job output file (e.g. muliPPIseq_DMS_editRate.o233697)")
     parser.add_argument("--out_csv",  default=None, help="Path for CSV output  (default: <job_output_stem>_stats.csv)")
-    parser.add_argument("--out_xlsx", default=None, help="Path for XLSX output (default: <job_output_stem>_stats.xlsx)")
     args = parser.parse_args()
 
     stem = os.path.splitext(args.job_output_file)[0]
     out_csv  = args.out_csv  or f"{stem}_stats.csv"
-    out_xlsx = args.out_xlsx or f"{stem}_stats.xlsx"
 
     df = parse_job_output(args.job_output_file)
 
     # ----- CSV -----
     df.to_csv(out_csv)
     print(f"CSV  written to: {out_csv}")
-
-    # ----- XLSX -----
-    try:
-        with pd.ExcelWriter(out_xlsx, engine="openpyxl") as writer:
-            df.to_excel(writer, sheet_name="Sheet1")
-        print(f"XLSX written to: {out_xlsx}")
-    except ImportError:
-        print("WARNING: openpyxl not installed — XLSX output skipped.", file=sys.stderr)
 
     # ----- preview -----
     print("\n--- Summary ---")

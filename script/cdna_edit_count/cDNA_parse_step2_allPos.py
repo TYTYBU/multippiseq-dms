@@ -460,16 +460,16 @@ except IOError as e:
     logger.error("can't open output file for writing: {}".format(e))
     sys.exit(1)
 
-f_out.write("Outcome\tTotal_reads\tIs_edited\tAny_edit_ct")
+f_out.write("Outcome,Total_reads,Is_edited,Any_edit_ct")
 for pos in edit_pos:
-    f_out.write(f"\tPos{pos}")
+    f_out.write(f",Pos{pos}")
 f_out.write("\n")
 
 for outcome in sorted(result_dict.keys()):
-    f_out.write(f"{outcome}\t{result_dict[outcome]['total']}\t{result_dict[outcome]['is_edited']}\t{result_dict[outcome]['any_edited_ct']}")
-    
+    f_out.write(f"{outcome},{result_dict[outcome]['total']},{result_dict[outcome]['is_edited']},{result_dict[outcome]['any_edited_ct']}")
+
     for pos in edit_pos:
-        f_out.write(f"\t{result_dict[outcome]['edit_pos'].get(pos, 0)}")
+        f_out.write(f",{result_dict[outcome]['edit_pos'].get(pos, 0)}")
     f_out.write("\n")
 
 f_out.close()
