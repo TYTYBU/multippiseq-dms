@@ -1,0 +1,59 @@
+#!/bin/bash -l
+
+#$ -N mPPIseq_dict_11_combdict
+#$ -j y
+#$ -V
+#$ -q all.q@compute-0-0,all.q@compute-0-1
+#$ -pe serial 32
+#$ -m ae
+#$ -M tyu7@bwh.harvard.edu
+#$ -wd /net/bgm/sherwood/PPIseq_proj
+#$ -o /net/bgm/sherwood/PPIseq_proj/job_out
+
+# Step 11 — build combined barcode->variant dictionaries from the combined
+# variant-mapped files (step 10 output), one per GENE_GROUPS label, with
+# per-group support/fidelity cutoffs from DICT_PARAMS_COMBINED_CSV.
+#
+# OPTIONAL: the cDNA pipeline uses the per-block dictionaries (step 05). This
+# step only runs when BUILD_COMBINED=1.
+
+source /net/bgm/sherwood/PPIseq_proj/multiPPIseq_DMS_central/qsub/dict_build/config.sh
+source "$CONDA_BASE/bin/activate" "$ENV_MAIN"
+
+if [ "${BUILD_COMBINED:-0}" != "1" ]; then
+	echo "BUILD_COMBINED!=1 -> skipping combined dictionary build."
+	exit 0
+fi
+
+COMBINED_DIR="$VARIANT_MAPPED_PATH/combined"
+OUT_DIR="$BC2VAR_PATH/combined"
+mkdir -p "$OUT_DIR"
+
+for f in "$COMBINED_DIR"/*_DMS_Dictionary.block_ref_seqs.csv.gz; do
+	[ -e "$f" ] || { echo "no combined variant-mapped files in $COMBINED_DIR; run step 10 first"; break; }
+	label=$(basename "$f" _DMS_Dictionary.block_ref_seqs.csv.gz)   # e.g. RAD51C_XRCC3
+	sup="$MIN_SUPPORT_READS"
+	fid="$MIN_ACCURACY"
+	if [ -f "$DICT_PARAMS_COMBINED_CSV" ]; then
+		# CSV cols: Group,proposed_fidelity_cutoff,proposed_support_read_cutoff.
+		# gsub strips CR/BOM so CRLF- or BOM-encoded CSVs parse cleanly.
+		row=$(awk -F, -v g="$label" '{gsub(/\r/,""); gsub(/^\xef\xbb\xbf/,"",$1)} NR>1 && $1==g {print $3"\t"$2; exit}' "$DICT_PARAMS_COMBINED_CSV")
+		if [ -z "$row" ]; then
+			echo "WARNING: no params row for $label in $DICT_PARAMS_COMBINED_CSV; using global $MIN_SUPPORT_READS / $MIN_ACCURACY"
+		else
+			sup=$(printf '%s' "$row" | cut -f1)
+			fid=$(printf '%s' "$row" | cut -f2)
+		fi
+	fi
+	echo "Group $label: min_support_reads=$sup min_accuracy=$fid"
+	python "$SCRIPT_PATH/multiPPIseq_DMS_dict_build_step3.py" \
+		--variant_map_in "$f" \
+		--raw_dict_out "$OUT_DIR/${label}.raw_dict.csv.gz" \
+		--out "$OUT_DIR/${label}.barcode_to_variant.csv.gz" \
+		$IGNORE_BC \
+		--min_support_reads "$sup" \
+		--min_accuracy "$fid" \
+		--jobs "$NUM_THREADS"
+done
+
+echo "combined barcode->variant dictionaries done -> $OUT_DIR"

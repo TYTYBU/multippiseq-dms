@@ -1,0 +1,51 @@
+#!/bin/bash -l
+
+#$ -N mPPIseq_dict_10_combine
+#$ -j y
+#$ -V
+#$ -q all.q@compute-0-0,all.q@compute-0-1
+#$ -pe serial 4
+#$ -m ae
+#$ -M tyu7@bwh.harvard.edu
+#$ -wd /net/bgm/sherwood/PPIseq_proj
+#$ -o /net/bgm/sherwood/PPIseq_proj/job_out
+
+# Step 10 — merge per-block variant-mapped reads into combined files, pooling
+# across blocks AND across the genes in each group (GENE_GROUPS, by convention:
+# COMMD* together; RAD51D+XRCC2; RAD51C+XRCC3). gzip concatenation is valid
+# (Python gzip reads multi-member streams). Output keeps the variant_mapped
+# per-read format and the _Dictionary.block_ref_seqs.csv.gz suffix so step 09
+# (scatter) and step 05/step3 (dictionary) can consume it unchanged.
+
+source /net/bgm/sherwood/PPIseq_proj/multiPPIseq_DMS_central/qsub/dict_build/config.sh
+
+# Optional step (combined dictionaries); the cDNA pipeline uses per-block dicts.
+if [ "${BUILD_COMBINED:-0}" != "1" ]; then
+	echo "BUILD_COMBINED!=1 -> skipping combined variant-mapped merge."
+	exit 0
+fi
+
+BLOCKS_DIR="$VARIANT_MAPPED_PATH/blocks"
+COMBINED_DIR="$VARIANT_MAPPED_PATH/combined"
+mkdir -p "$COMBINED_DIR"
+
+for group in $GENE_GROUPS; do
+	label="${group%%:*}"
+	genes="${group#*:}"; genes="${genes//,/ }"
+	files=()
+	for g in $genes; do
+		for f in "$BLOCKS_DIR"/*"${g}"_DMS*.block_ref_seqs.csv.gz; do
+			[ -e "$f" ] && files+=("$f")
+		done
+	done
+	if [ ${#files[@]} -eq 0 ]; then
+		echo "group $label ($genes): no matching blocks in batch; skipping"
+		continue
+	fi
+	out="$COMBINED_DIR/${label}_DMS_Dictionary.block_ref_seqs.csv.gz"
+	echo "group $label: merging ${#files[@]} block file(s) -> $out"
+	printf '  %s\n' "${files[@]}"
+	cat "${files[@]}" > "$out"
+done
+
+echo "combine done -> $COMBINED_DIR"

@@ -202,6 +202,33 @@ output location. All step 06–09 outputs live under `barcode_to_variant/<LIBTYP
   across many variants per bc1); some blocks (e.g. RAD51D_DMS_8) are bimodal in fidelity,
   reflecting two bc1 collision-multiplicity populations (~6 vs ~tens of variants per bc1).
 
+## Combined dictionaries (steps 10–11; OPTIONAL — `BUILD_COMBINED=1`)
+The cDNA pipeline keys on the per-block dictionaries (step 05); the combined dictionaries are
+an optional convenience and the whole branch is gated behind `BUILD_COMBINED` (default 0).
+
+### Step 10 — Combine variant-mapped reads across blocks/genes (optional)
+- **Inputs:** step-04 `variant_mapped/<LIBTYPE>/blocks` per-read CSVs.
+- **Method:** `10_combine_variant_mapped.qsub` concatenates (gzip multi-member; valid) all
+  blocks of the genes in each `GENE_GROUPS` entry (COMMD* together; RAD51D+XRCC2; RAD51C+XRCC3)
+  into one combined variant-mapped file per group, keeping the per-read format and the
+  `_Dictionary.block_ref_seqs.csv.gz` suffix so steps 09/11 consume it unchanged. The variant
+  column keeps its gene prefix (`GENE---variant`) so genes stay distinguishable after merge.
+- **Output:** `variant_mapped/<LIBTYPE>/combined/<group>_DMS_Dictionary.block_ref_seqs.csv.gz`.
+- **QC:** run step 09 on the combined dir (`SCATTER_IN_DIR=…/combined`,
+  `SCATTER_OUT_DIR=…/support_accuracy_scatter_combined`, `SCATTER_PARAMS_CSV=` to suppress the
+  box) to choose per-group cutoffs before building.
+
+### Step 11 — Build combined dictionaries (optional)
+- **Inputs:** step-10 combined variant-mapped files; per-group cutoffs from
+  `DICT_PARAMS_COMBINED_CSV` (`Group,proposed_fidelity_cutoff,proposed_support_read_cutoff`).
+- **Method:** `11_combined_dictionary.qsub` runs step3.py per group, looking up its cutoff by
+  `Group` label (falls back to global `MIN_SUPPORT_READS`/`MIN_ACCURACY` if absent), with
+  `IGNORE_BC` (bc1-only).
+- **Output:** `barcode_to_variant/<LIBTYPE>/combined/<group>.barcode_to_variant.csv.gz`
+  (+ `.raw_dict.csv.gz`).
+- **Pilot result (support≥3):** `RAD51C_XRCC3` fidelity≥0.125 → 42,475 barcodes;
+  `RAD51D_XRCC2` fidelity≥0.0625 → 41,289 barcodes.
+
 ## Notes
 - `--ignore_bc2` (bc1-only) is the **committed Dual_NEBuilder design**, not a defect; the
   bc1+bc2 and grid sweeps were evaluated and dropped. Low pilot yield is expected from

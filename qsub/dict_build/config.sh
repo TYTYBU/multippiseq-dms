@@ -80,3 +80,18 @@ IGNORE_BC=${IGNORE_BC:---ignore_bc2}
 # only the per-block dictionaries and skip the per-gene merge (set to 0 to also
 # build per-gene dictionaries once parameters are finalized).
 BLOCK_LEVEL_ONLY=${BLOCK_LEVEL_ONLY:-1}
+
+# ---- steps 10-11 (combined dictionaries) params -----------------------
+# The combined dictionaries (pool reads across blocks AND across the genes in
+# each group) are OPTIONAL: the cDNA pipeline uses the per-block dictionaries.
+# Steps 10 (combine variant-mapped), the combined scatter, and 11 (combined
+# dictionary build) only run when BUILD_COMBINED=1.
+BUILD_COMBINED=${BUILD_COMBINED:-0}
+# Group definitions, by convention: all COMMD* together; RAD51D+XRCC2 together;
+# RAD51C+XRCC3 together. Format: "<label>:<gene,gene,...>" entries,
+# space-separated. Groups with no matching blocks in the batch are skipped.
+GENE_GROUPS=${GENE_GROUPS:-"RAD51C_XRCC3:RAD51C,XRCC3 RAD51D_XRCC2:RAD51D,XRCC2 COMMD_all:COMMD1,COMMD5,COMMD6,COMMD10"}
+# Per-group support/fidelity cutoffs for the combined dictionaries
+# (columns: Group,proposed_fidelity_cutoff,proposed_support_read_cutoff).
+# Falls back to global MIN_SUPPORT_READS/MIN_ACCURACY if a group is absent.
+DICT_PARAMS_COMBINED_CSV=${DICT_PARAMS_COMBINED_CSV:-$DATA_PATH/dictionary_parameters_combined.csv}

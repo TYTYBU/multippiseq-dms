@@ -13,20 +13,32 @@
 # Step 09 — per-barcode support x fidelity scatter (one dot per barcode) for
 # visual dictionary assessment. Uses IGNORE_BC from config (bc1-only, committed)
 # so the cloud matches the real dictionary. The drawn threshold box uses the
-# per-block cutoffs from DICT_PARAMS_CSV when present (each block its own box),
+# per-block cutoffs from the params CSV when present (each block its own box),
 # else the global MIN_SUPPORT_READS x MIN_ACCURACY.
+#
+# Reusable via env overrides (defaults = per-block dictionaries):
+#   SCATTER_IN_DIR      variant-mapped dir to scan (default blocks/)
+#   SCATTER_OUT_DIR     output dir (default stats/support_accuracy_scatter)
+#   SCATTER_PARAMS_CSV  per-block cutoff CSV; set EMPTY to suppress the box
+#                       (e.g. combined files, where cutoffs aren't chosen yet)
+# e.g. combined files (no chosen params, generic 3x0.9 guide only):
+#   SCATTER_IN_DIR=$VARIANT_MAPPED_PATH/combined \
+#   SCATTER_OUT_DIR=$STATS_PATH/support_accuracy_scatter_combined \
+#   SCATTER_PARAMS_CSV= qsub 09_support_accuracy_scatter.qsub
 
 source /net/bgm/sherwood/PPIseq_proj/multiPPIseq_DMS_central/qsub/dict_build/config.sh
 source "$CONDA_BASE/bin/activate" "$ENV_MAIN"
 
-OUT_DIR="$STATS_PATH/support_accuracy_scatter"
+SCATTER_IN_DIR="${SCATTER_IN_DIR:-$VARIANT_MAPPED_PATH/blocks}"
+OUT_DIR="${SCATTER_OUT_DIR:-$STATS_PATH/support_accuracy_scatter}"
+PARAMS_CSV="${SCATTER_PARAMS_CSV-$DICT_PARAMS_CSV}"   # '-' (not ':-') so empty is honored
 mkdir -p "$OUT_DIR"
 
 PARAMS_ARG=()
-[ -f "$DICT_PARAMS_CSV" ] && PARAMS_ARG=(--params_csv "$DICT_PARAMS_CSV")
+[ -n "$PARAMS_CSV" ] && [ -f "$PARAMS_CSV" ] && PARAMS_ARG=(--params_csv "$PARAMS_CSV")
 
 python "$SCRIPT_PATH/multiPPIseq_DMS_dict_support_accuracy_scatter.py" \
-	--variant_mapped_dir "$VARIANT_MAPPED_PATH/blocks" \
+	--variant_mapped_dir "$SCATTER_IN_DIR" \
 	--out_prefix "$OUT_DIR/support_accuracy" \
 	--min_support "$MIN_SUPPORT_READS" \
 	--min_accuracy "$MIN_ACCURACY" \

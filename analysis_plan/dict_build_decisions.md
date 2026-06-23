@@ -4,6 +4,29 @@ Dated, append-only. Newest entries on top. One entry per real decision.
 
 ---
 
+## 2026-06-23 — Combined dictionaries built but kept optional (cDNA uses per-block)
+
+**Context.** By convention reads are pooled across blocks and across paired genes into
+combined groups (COMMD* together; RAD51D+XRCC2; RAD51C+XRCC3). We built combined
+variant-mapped files (step 10) and combined dictionaries (step 11) from them. But the cDNA
+counting pipeline downstream will key on the **per-block** dictionaries, not the combined ones.
+
+**Decision.** Everything touching the combined dictionaries — step 10 (combine
+variant-mapped), the combined-files scatter, and the new step 11 (combined dictionary build)
+— is **gated behind `BUILD_COMBINED` (default 0)**. Per-block dictionaries (step 05) run
+unconditionally. Combined per-group cutoffs come from `dictionary_parameters_combined.csv`
+(cols `Group,proposed_fidelity_cutoff,proposed_support_read_cutoff`), falling back to the
+global 3 × 0.9 if a group is absent.
+
+**Evidence / pointer.** Built with Tian's chosen combined cutoffs (support≥3):
+`RAD51C_XRCC3` fidelity≥0.125 → 42,475 barcodes; `RAD51D_XRCC2` fidelity≥0.0625 → 41,289
+barcodes, at
+`barcode_to_variant/Dual_NEBuilder/combined/`. Gene prefix retained in the variant column
+(`RAD51C---K194N`) so genes stay distinguishable post-merge. New script
+`qsub/dict_build/11_combined_dictionary.qsub`.
+
+---
+
 ## 2026-06-23 — Step-09 scatter: show the chosen per-block cutoffs (supersedes prior entry)
 
 **Context.** The prior entry removed the per-block threshold box to avoid "circularity."
