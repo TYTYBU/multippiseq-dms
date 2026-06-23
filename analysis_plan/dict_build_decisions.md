@@ -4,7 +4,27 @@ Dated, append-only. Newest entries on top. One entry per real decision.
 
 ---
 
-## 2026-06-23 — Step-09 scatter stays parameter-agnostic (it *selects* the parameters)
+## 2026-06-23 — Step-09 scatter: show the chosen per-block cutoffs (supersedes prior entry)
+
+**Context.** The prior entry removed the per-block threshold box to avoid "circularity."
+On reflection that reasoning was wrong: step 09's input is the step-04 `variant_mapped`
+reads, **not** the dictionary, and the per-barcode `(best_ct, accuracy)` cloud is recomputed
+independently of any threshold. So the dots/density/`perbarcode.csv` are identical regardless
+of parameters — the only parameter-dependent element is the dashed reference line. Drawing the
+chosen cutoffs is therefore a pure annotation on a parameter-independent cloud, which is
+informative (you see how the decision sits on the data), not circular.
+
+**Decision.** Restored the `--params_csv` feature (recovered from commit 77ef2e9). Step 09
+now draws **each block's chosen support/fidelity cutoff** (from `DICT_PARAMS_CSV`) on its
+panel; the `ALL` panel omits the box since cutoffs differ per block. Falls back to the generic
+`--min_support`/`--min_accuracy` guide (3 × 0.9) when no params CSV is given.
+
+**Status / pointer.** Applied; scatter regenerated with per-block boxes. Supersedes
+"2026-06-23 — Step-09 scatter stays parameter-agnostic" below.
+
+---
+
+## 2026-06-23 — Step-09 scatter stays parameter-agnostic (it *selects* the parameters) [SUPERSEDED]
 
 **Context.** While wiring per-block thresholds I briefly made step 09 draw each block's
 chosen cutoff (from `dictionary_parameters.csv`) as its threshold box. That inverts the

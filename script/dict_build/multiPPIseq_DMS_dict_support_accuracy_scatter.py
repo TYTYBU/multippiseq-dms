@@ -13,12 +13,9 @@ It then plots one dot per barcode on log2-log2 axes:
   x = best_ct (support reads)   ticks 2,4,8,...,512
   y = accuracy (fidelity)       ticks 1/64, 1/32, ..., 1/2, 1
 Dots are colored by local barcode density (overplotting is severe; a raw scatter
-of ~200k identical grid points would be unreadable).
-
-This is an EXPLORATORY diagnostic: you read the cloud to CHOOSE per-block support/
-fidelity cutoffs. It is therefore produced independently of the decided parameters
--- the dashed reference lines (--min_support/--min_accuracy, default 3 x 0.9) are a
-generic guide for reading the plot, NOT the finally-chosen cutoffs.
+of ~200k identical grid points would be unreadable). The current dictionary
+threshold box (>= min_support_reads, >= min_accuracy) is drawn so you can see how
+much of the barcode mass falls inside it.
 
 Tie barcodes (no unique best variant) are kept for the cloud but flagged via the
 n_tie column in the per-barcode CSV; pass --drop_ties to exclude them (matching
@@ -103,6 +100,23 @@ def per_barcode(
     return out
 
 
+def load_params_csv(path: str) -> Dict[str, Tuple[int, float]]:
+    """block_key '<GENE>_DMS_<n>' -> (min_support, min_accuracy). Tolerates BOM/CRLF."""
+    out: Dict[str, Tuple[int, float]] = {}
+    with open(path, "rt", encoding="utf-8-sig", newline="") as fh:
+        reader = csv.DictReader(fh)
+        for row in reader:
+            gene = (row["Gene"] or "").strip()
+            blk = (row["Block_number"] or "").strip()
+            if not gene or not blk:
+                continue
+            out[f"{gene}_DMS_{blk}"] = (
+                int(float(row["proposed_support_read_cutoff"])),
+                float(row["proposed_fidelity_cutoff"]),
+            )
+    return out
+
+
 def discover_blocks(variant_mapped_dir: str, only) -> List[Tuple[str, str]]:
     out = []
     for fn in sorted(os.listdir(variant_mapped_dir)):
@@ -132,9 +146,11 @@ def plot_scatter(
     acc: np.ndarray,
     out_png: str,
     *,
-    min_support: int,
-    min_accuracy: float,
+    min_support,
+    min_accuracy,
 ) -> None:
+    # min_support / min_accuracy may be None to suppress the threshold box (e.g.
+    # the ALL panel when per-block thresholds differ).
     if best_ct.size == 0:
         logging.warning("No barcodes for %s; skipping plot", title)
         return
@@ -172,11 +188,11 @@ def plot_scatter(
     ax.set_ylim(y_floor * 0.95, 1.05)
     ax.grid(True, which="both", ls=":", lw=0.4, alpha=0.5)
 
-    # reference threshold lines (a generic guide for reading the cloud — NOT the
-    # finally-chosen per-block cutoffs; those are decided by inspecting this plot)
-    ax.axvline(min_support, color="crimson", ls="--", lw=1)
-    ax.axhline(min_accuracy, color="crimson", ls="--", lw=1)
-    ax.axvspan(min_support, ax.get_xlim()[1], ymin=0, ymax=1, color="crimson", alpha=0.04)
+    # current dictionary threshold box: callable = x >= min_support & y >= min_accuracy
+    if min_support is not None and min_accuracy is not None:
+        ax.axvline(min_support, color="crimson", ls="--", lw=1)
+        ax.axhline(min_accuracy, color="crimson", ls="--", lw=1)
+        ax.axvspan(min_support, ax.get_xlim()[1], ymin=0, ymax=1, color="crimson", alpha=0.04)
     ax.set_title(f"{title} — {best_ct.size:,} barcodes")
     ax.set_xlabel("support reads for best variant (log2)")
     ax.set_ylabel("fidelity = best_ct / total_ct (log2)")
@@ -196,17 +212,14 @@ def parse_args():
         "--script_dir", default=os.path.dirname(os.path.abspath(__file__))
     )
     p.add_argument("--blocks", nargs="*", default=None)
+    p.add_argument("--min_support", type=int, default=3, help="Threshold box x (default 3)")
+    p.add_argument("--min_accuracy", type=float, default=0.9, help="Threshold box y (default 0.9)")
     p.add_argument(
-        "--min_support",
-        type=int,
-        default=3,
-        help="Reference line x (default 3). A generic guide only, not a chosen cutoff.",
-    )
-    p.add_argument(
-        "--min_accuracy",
-        type=float,
-        default=0.9,
-        help="Reference line y (default 0.9). A generic guide only, not a chosen cutoff.",
+        "--params_csv",
+        default=None,
+        help="Per-block thresholds for the drawn box (cols Gene,Block_number,"
+        "proposed_fidelity_cutoff,proposed_support_read_cutoff). Overrides "
+        "--min_support/--min_accuracy per block; ALL panel then draws no box.",
     )
     p.add_argument("--drop_ties", action="store_true", help="Exclude tie barcodes (match dict filter)")
     ig = p.add_mutually_exclusive_group()
@@ -227,6 +240,10 @@ def main() -> None:
     if not blocks:
         logging.error("No variant_mapped blocks found.")
         sys.exit(1)
+
+    params = load_params_csv(args.params_csv) if args.params_csv else {}
+    if params:
+        logging.info("Per-block threshold box from %s (%s blocks)", args.params_csv, len(params))
 
     os.makedirs(os.path.dirname(os.path.abspath(args.out_prefix)) or ".", exist_ok=True)
     csv_path = f"{args.out_prefix}.perbarcode.csv.gz"
@@ -249,13 +266,14 @@ def main() -> None:
             b_best.append(best_ct)
             b_acc.append(acc)
         logging.info("Block %s: %s barcodes plotted", block, len(b_best))
+        b_sup, b_fid = params.get(block, (args.min_support, args.min_accuracy))
         plot_scatter(
             block,
             np.asarray(b_best),
             np.asarray(b_acc),
             f"{args.out_prefix}.{block}.png",
-            min_support=args.min_support,
-            min_accuracy=args.min_accuracy,
+            min_support=b_sup,
+            min_accuracy=b_fid,
         )
         all_best.extend(b_best)
         all_acc.extend(b_acc)
@@ -263,13 +281,16 @@ def main() -> None:
     fh.close()
     logging.info("Per-barcode table -> %s", csv_path)
 
+    # ALL panel: with per-block thresholds the box is ambiguous, so suppress it.
+    all_sup = None if params else args.min_support
+    all_fid = None if params else args.min_accuracy
     plot_scatter(
         "ALL blocks",
         np.asarray(all_best),
         np.asarray(all_acc),
         f"{args.out_prefix}.ALL.png",
-        min_support=args.min_support,
-        min_accuracy=args.min_accuracy,
+        min_support=all_sup,
+        min_accuracy=all_fid,
     )
 
 

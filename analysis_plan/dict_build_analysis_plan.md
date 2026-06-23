@@ -178,7 +178,7 @@ output location. All step 06–09 outputs live under `barcode_to_variant/<LIBTYP
   step measures the read-support depth per bc1. (Pilot ALL: ~214k unique bc1, bimodal — ~90k
   singletons vs ~70k with ≥31 reads.)
 
-### Step 09 — Per-barcode support × fidelity scatter (parameter selection; optional)
+### Step 09 — Per-barcode support × fidelity scatter (QC / parameter context; optional)
 - **Inputs:** step-04 `variant_mapped/<LIBTYPE>/blocks` per-read CSVs only.
 - **Method:** `multiPPIseq_DMS_dict_support_accuracy_scatter.py` (`09_support_accuracy_scatter.qsub`).
   Reuses the step3 load+redistribute (so per-barcode numbers match the dictionary), then for
@@ -186,10 +186,14 @@ output location. All step 06–09 outputs live under `barcode_to_variant/<LIBTYP
   (`best_ct`), y = fidelity (`best_ct/total_ct`). Dots are colored by local barcode density
   (an 80×80 log2 `histogram2d`; raw overplotting would be unreadable). Tie barcodes are kept
   for the cloud but flagged via `n_tie` in the CSV (`--drop_ties` to exclude). Uses `IGNORE_BC`
-  (bc1-only). **This plot is produced independently of the chosen parameters** — the dashed
-  reference lines (`--min_support`/`--min_accuracy`, default 3 × 0.9) are a generic reading
-  guide, *not* the per-block cutoffs. The per-block `dictionary_parameters.csv` values were
-  **chosen by inspecting this scatter**, so drawing them back onto it would be circular.
+  (bc1-only). **The plotted cloud is parameter-independent** (the input is the step-04
+  `variant_mapped` reads, not the dictionary; per-barcode `(best_ct, accuracy)` is recomputed
+  here). Only the dashed reference lines depend on parameters: when `DICT_PARAMS_CSV` is passed
+  (`--params_csv`), each per-block panel draws **that block's chosen support/fidelity cutoff**
+  so the decision can be seen against the cloud (the `ALL` panel omits the box since cutoffs
+  differ per block); otherwise a generic `--min_support`/`--min_accuracy` guide (default 3 × 0.9)
+  is drawn. Because the lines are a pure overlay on a parameter-independent cloud, annotating the
+  chosen cutoffs is informative, not circular.
 - **Output:** under `barcode_to_variant/<LIBTYPE>/stats/support_accuracy_scatter/`:
   `support_accuracy.perbarcode.csv.gz` (`block, bc_pair, best_ct, total_ct, accuracy, n_tie`)
   and per-block + `ALL` PNG scatters.

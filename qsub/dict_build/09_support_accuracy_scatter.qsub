@@ -11,11 +11,10 @@
 #$ -o /net/bgm/sherwood/PPIseq_proj/job_out
 
 # Step 09 — per-barcode support x fidelity scatter (one dot per barcode) for
-# visual dictionary assessment. This is an EXPLORATORY diagnostic used to CHOOSE
-# the per-block thresholds: it is intentionally produced independently of the
-# decided parameters (the drawn reference lines are a generic guide, default
-# 3 x 0.9, NOT the per-block cutoffs in dictionary_parameters.csv). Uses
-# IGNORE_BC from config (bc1-only) so the cloud matches the real dictionary.
+# visual dictionary assessment. Uses IGNORE_BC from config (bc1-only, committed)
+# so the cloud matches the real dictionary. The drawn threshold box uses the
+# per-block cutoffs from DICT_PARAMS_CSV when present (each block its own box),
+# else the global MIN_SUPPORT_READS x MIN_ACCURACY.
 
 source /net/bgm/sherwood/PPIseq_proj/multiPPIseq_DMS_central/qsub/dict_build/config.sh
 source "$CONDA_BASE/bin/activate" "$ENV_MAIN"
@@ -23,9 +22,15 @@ source "$CONDA_BASE/bin/activate" "$ENV_MAIN"
 OUT_DIR="$STATS_PATH/support_accuracy_scatter"
 mkdir -p "$OUT_DIR"
 
+PARAMS_ARG=()
+[ -f "$DICT_PARAMS_CSV" ] && PARAMS_ARG=(--params_csv "$DICT_PARAMS_CSV")
+
 python "$SCRIPT_PATH/multiPPIseq_DMS_dict_support_accuracy_scatter.py" \
 	--variant_mapped_dir "$VARIANT_MAPPED_PATH/blocks" \
 	--out_prefix "$OUT_DIR/support_accuracy" \
+	--min_support "$MIN_SUPPORT_READS" \
+	--min_accuracy "$MIN_ACCURACY" \
+	"${PARAMS_ARG[@]}" \
 	$IGNORE_BC \
 	--jobs "$NUM_THREADS"
 
