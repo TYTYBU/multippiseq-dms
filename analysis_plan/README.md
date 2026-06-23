@@ -22,5 +22,7 @@ clean.
 | [dict_build_decisions.md](dict_build_decisions.md) | Dated decision log. |
 
 ## Part 2 — cDNA edit count
-*(to be filled in — the second half of the pipeline that uses the dictionaries to
-count edits in cDNA readout)*
+| File | Role |
+|---|---|
+| [cdna_edit_count_analysis_plan.md](cdna_edit_count_analysis_plan.md) | Methods + onboarding. Applies a barcode→variant dictionary to cDNA reads and counts edits per variant. Driven by `qsub/cdna_edit_count/` → `script/cdna_edit_count/`. |
+| [cdna_edit_count_decisions.md](cdna_edit_count_decisions.md) | Dated decision log. |

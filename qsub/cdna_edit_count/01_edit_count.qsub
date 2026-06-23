@@ -1,0 +1,78 @@
+#!/bin/bash -l
+
+#$ -N mPPIseq_cDNA_01_editcount
+#$ -j y
+#$ -V
+#$ -q all.q@compute-0-0,all.q@compute-0-1
+#$ -pe serial 16
+#$ -m ae
+#$ -M tyu7@bwh.harvard.edu
+#$ -wd /net/bgm/sherwood/PPIseq_proj
+#$ -o /net/bgm/sherwood/PPIseq_proj/job_out
+
+# Step 01 — count edits in cDNA samples against the pilot per-block dictionary.
+#   (a) build the pooled dictionary by concatenating the SAMPLE's per-block dicts
+#   (b) Step1: infer all edited-barcode variants from that dictionary
+#   (c) Step2: for each batch x rep, anchor the template, call edits, match the
+#       barcode (a bc1 reused across blocks counts toward every variant), and
+#       write <rep>.cDNA_parsed.txt to a SEPARATE pilot output folder per batch.
+# Each Step2 prints one Report_line to stdout, captured per-rep under REPORT_DIR
+# for the stats step (02). bc1-only (--ignore_bc2), matching the dictionary.
+
+source /net/bgm/sherwood/PPIseq_proj/multiPPIseq_DMS_central/qsub/cdna_edit_count/config.sh
+source "$CONDA_BASE/bin/activate" "$ENV_MAIN"
+
+mkdir -p "$DICT_OUT_DIR" "$TEMP_DIR" "$REPORT_DIR"
+
+# --- (a) build pooled dictionary from the per-block dicts --------------
+# gzip multi-member concat is valid (pandas/gzip read all members). A bc1
+# present in multiple blocks appears as multiple rows -> multiple variants.
+blocks=()
+for glob in $SAMPLE_BLOCK_GLOBS; do
+	for f in "$BLOCKS_DICT_DIR"/$glob.barcode_to_variant.csv.gz; do
+		[ -e "$f" ] && blocks+=("$f")
+	done
+done
+if [ ${#blocks[@]} -eq 0 ]; then
+	echo "ERROR: no per-block dicts found for SAMPLE=$SAMPLE in $BLOCKS_DICT_DIR" >&2
+	exit 1
+fi
+echo "Pooling ${#blocks[@]} per-block dict(s) -> $DICT_FILE"
+printf '  %s\n' "${blocks[@]}"
+cat "${blocks[@]}" > "$DICT_FILE"
+
+# --- (b) Step1: infer all possible edited barcodes from the dictionary -
+python "$SCRIPT_PATH/cDNA_parse_step1.py" \
+	--dict_in "$DICT_FILE" \
+	--edit_mode "$EDIT_MODE" \
+	--out_prefix "$TEMP_DIR/$SAMPLE" \
+	$IGNORE_BC
+
+# --- (c) Step2: count edits per cDNA rep, per batch -------------------
+for batch in $EDITRATE_BATCHES; do
+	RAW="$PROJ_PATH/data/$batch/raw_data"
+	OUT="$PROJ_PATH/data/$batch/$OUT_SUBDIR"
+	mkdir -p "$OUT" "$REPORT_DIR/$batch"
+	shopt -s nullglob
+	for f in "$RAW"/*"$SAMPLE_GLOB"*_R1.fastq.gz; do
+		f2=$(basename "$f" _R1.fastq.gz)
+		echo "Parsing $batch / $f2"
+		python "$SCRIPT_PATH/cDNA_parse_step2_allPos.py" \
+			--cDNA_in "$f" \
+			--dict_in "$DICT_FILE" \
+			--bc_alt_prefix "$TEMP_DIR/$SAMPLE" \
+			--out "$OUT/${f2}.cDNA_parsed.txt" \
+			--edit_mode "$EDIT_MODE" \
+			--template_seq "$TEMPLATE_SEQ" \
+			--regex_match_len "$REGEX_MATCH_LEN" \
+			--r1_post_bc2 "$R1_POST_BC2" \
+			--bc1_min_len "$BC1_MIN_LEN" \
+			--bc1_max_len "$BC1_MAX_LEN" \
+			$IGNORE_BC \
+			> "$REPORT_DIR/$batch/${f2}.report.txt" &
+	done
+	shopt -u nullglob
+done
+wait
+
+echo "cDNA edit count done. parsed -> data/<batch>/$OUT_SUBDIR ; reports -> $REPORT_DIR"

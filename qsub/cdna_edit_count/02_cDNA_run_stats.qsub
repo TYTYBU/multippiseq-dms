@@ -1,0 +1,43 @@
+#!/bin/bash -l
+
+#$ -N mPPIseq_cDNA_02_runstats
+#$ -j y
+#$ -V
+#$ -q all.q@compute-0-0,all.q@compute-0-1
+#$ -pe serial 1
+#$ -m ae
+#$ -M tyu7@bwh.harvard.edu
+#$ -wd /net/bgm/sherwood/PPIseq_proj
+#$ -o /net/bgm/sherwood/PPIseq_proj/job_out
+
+# Step 02 — cDNA-sample diagnosis stats. Reads the per-rep Report_line files
+# written by step 01 and summarizes (reads total / barcode-matched /
+# template-matched / both, unique & matched barcodes) into one CSV per batch,
+# placed alongside that batch's pilot cDNA output (canonical cDNA_parsed/ and
+# any existing stats CSVs are left untouched).
+#
+# These are cDNA-SAMPLE diagnostics, distinct from the dictionary-BUILD
+# diagnostics (dict_build steps 06-09).
+#
+# Chain after step 01 with: qsub -hold_jid <01_jobid> 02_cDNA_run_stats.qsub
+
+source /net/bgm/sherwood/PPIseq_proj/multiPPIseq_DMS_central/qsub/cdna_edit_count/config.sh
+source "$CONDA_BASE/bin/activate" "$ENV_MAIN"
+
+for batch in $EDITRATE_BATCHES; do
+	reports=("$REPORT_DIR/$batch"/*.report.txt)
+	if [ ! -e "${reports[0]}" ]; then
+		echo "no report files for $batch in $REPORT_DIR/$batch; did step 01 run? skipping"
+		continue
+	fi
+	combined="$REPORT_DIR/$batch/_all_report_lines.txt"
+	cat "${reports[@]}" > "$combined"
+	out_csv="$PROJ_PATH/data/$batch/$OUT_SUBDIR/$STATS_CSV_NAME"
+	echo "$batch: $((${#reports[@]})) rep(s) -> $out_csv"
+	python "$SCRIPT_PATH/extract_cDNA_run_stats.py" \
+		"$combined" \
+		--out_csv "$out_csv" \
+		--out_xlsx "${out_csv%.csv}.xlsx"
+done
+
+echo "cDNA run-stats done."
