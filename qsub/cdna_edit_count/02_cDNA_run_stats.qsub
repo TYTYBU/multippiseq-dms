@@ -25,12 +25,13 @@ source /net/bgm/sherwood/PPIseq_proj/multiPPIseq_DMS_central/qsub/cdna_edit_coun
 source "$CONDA_BASE/bin/activate" "$ENV_MAIN"
 
 for batch in $EDITRATE_BATCHES; do
-	reports=("$REPORT_DIR/$batch"/*.report.txt)
+	REPORTS="$PROJ_PATH/data/$batch/$OUT_SUBDIR/$REPORT_SUBDIR"
+	reports=("$REPORTS"/*.report.txt)
 	if [ ! -e "${reports[0]}" ]; then
-		echo "no report files for $batch in $REPORT_DIR/$batch; did step 01 run? skipping"
+		echo "no report files for $batch in $REPORTS; did step 01 run? skipping"
 		continue
 	fi
-	combined="$REPORT_DIR/$batch/_all_report_lines.txt"
+	combined="$REPORTS/_all_report_lines.txt"
 	cat "${reports[@]}" > "$combined"
 	out_csv="$PROJ_PATH/data/$batch/$OUT_SUBDIR/$STATS_CSV_NAME"
 	echo "$batch: $((${#reports[@]})) rep(s) -> $out_csv"

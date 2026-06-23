@@ -1,0 +1,50 @@
+#!/bin/bash -l
+
+#$ -N mPPIseq_dict_12_concat
+#$ -j y
+#$ -V
+#$ -q all.q@compute-0-0,all.q@compute-0-1
+#$ -pe serial 1
+#$ -m ae
+#$ -M tyu7@bwh.harvard.edu
+#$ -wd /net/bgm/sherwood/PPIseq_proj
+#$ -o /net/bgm/sherwood/PPIseq_proj/job_out
+
+# Step 12 — concatenated dictionaries: pool the per-block barcode->variant
+# dictionaries across the genes in each GENE_GROUPS group (COMMD* together;
+# RAD51D+XRCC2; RAD51C+XRCC3) by gzip multi-member concat. This is the
+# dictionary the cDNA edit-count pipeline consumes for a pooled sample.
+#
+# Unlike the COMBINED dictionaries (step 11, collapsed via step3 with a single
+# per-group cutoff), the CONCATENATED dictionaries keep each block's own
+# support/fidelity cutoff and preserve cross-block bc1 rows: a bc1 reused across
+# blocks for different variants stays on multiple rows (cDNA_parse counts a read
+# toward every such variant). Groups with no per-block dicts in the batch are
+# skipped. Built by default (cheap; not gated by BUILD_COMBINED).
+
+source /net/bgm/sherwood/PPIseq_proj/multiPPIseq_DMS_central/qsub/dict_build/config.sh
+
+BLOCKS_DIR="$BC2VAR_PATH/blocks"
+CONCAT_DIR="$BC2VAR_PATH/concatenated"
+mkdir -p "$CONCAT_DIR"
+
+for group in $GENE_GROUPS; do
+	label="${group%%:*}"
+	genes="${group#*:}"; genes="${genes//,/ }"
+	files=()
+	for g in $genes; do
+		for f in "$BLOCKS_DIR"/${g}_DMS_*.barcode_to_variant.csv.gz; do
+			[ -e "$f" ] && files+=("$f")
+		done
+	done
+	if [ ${#files[@]} -eq 0 ]; then
+		echo "group $label ($genes): no per-block dicts in batch; skipping"
+		continue
+	fi
+	out="$CONCAT_DIR/${label}.barcode_to_variant.csv.gz"
+	echo "group $label: concatenating ${#files[@]} per-block dict(s) -> $out"
+	printf '  %s\n' "${files[@]}"
+	cat "${files[@]}" > "$out"
+done
+
+echo "concatenated dictionaries done -> $CONCAT_DIR"

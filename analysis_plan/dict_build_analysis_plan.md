@@ -229,6 +229,21 @@ an optional convenience and the whole branch is gated behind `BUILD_COMBINED` (d
 - **Pilot result (support≥3):** `RAD51C_XRCC3` fidelity≥0.125 → 42,475 barcodes;
   `RAD51D_XRCC2` fidelity≥0.0625 → 41,289 barcodes.
 
+## Concatenated dictionaries (step 12; built by default)
+The dictionary the **cDNA edit-count** pipeline (part 2) actually consumes for a pooled
+sample. Distinct from the *combined* dictionary: not collapsed via step3, so each block keeps
+its own cutoff and a bc1 reused across blocks stays on multiple rows (a cDNA read is later
+counted toward every variant that bc1 maps to).
+
+### Step 12 — Concatenate per-block dictionaries per group
+- **Inputs:** the per-block `barcode_to_variant/<LIBTYPE>/blocks/*.barcode_to_variant.csv.gz`;
+  groups from `GENE_GROUPS`.
+- **Method:** `12_concatenate_dictionary.qsub` gzip-concatenates each group's per-block dicts
+  (COMMD* together; RAD51D+XRCC2; RAD51C+XRCC3). Groups with no per-block dicts are skipped.
+- **Output:** `barcode_to_variant/<LIBTYPE>/concatenated/<group>.barcode_to_variant.csv.gz`.
+- **Pilot result:** `RAD51C_XRCC3` 47,961 rows (47,946 unique bc1; 15 multi-variant);
+  `RAD51D_XRCC2` 44,168 rows. (COMMD_all skipped — no blocks in this batch.)
+
 ## Notes
 - `--ignore_bc2` (bc1-only) is the **committed Dual_NEBuilder design**, not a defect; the
   bc1+bc2 and grid sweeps were evaluated and dropped. Low pilot yield is expected from

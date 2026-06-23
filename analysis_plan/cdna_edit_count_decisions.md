@@ -4,6 +4,31 @@ Dated, append-only. Newest entries on top. One entry per real decision.
 
 ---
 
+## 2026-06-23 — Concatenated dictionary promoted to a dict_build artifact; temp/reports relocated
+
+**Context.** The pooled per-block dictionary was originally built inline by cDNA step 01 into a
+`cdna_edit_count/` work folder under the pilot dict dir. Tian wanted it to live alongside the
+`combined/` dictionaries as a first-class artifact, and the scratch folder cleaned up.
+
+**Decisions.**
+1. **Concatenated dictionaries are now built by dict_build step 12**
+   (`12_concatenate_dictionary.qsub`) into `barcode_to_variant/<LIBTYPE>/concatenated/`, one per
+   `GENE_GROUPS` group, by default (cheap gzip concat; not gated by `BUILD_COMBINED`). Generated
+   for `RAD51C_XRCC3` (47,961 rows) and `RAD51D_XRCC2` (44,168 rows); COMMD_all skipped (no
+   blocks in batch).
+2. **cDNA step 01 now consumes that prebuilt dict** (`DICT_FILE` → `concatenated/<SAMPLE>…`)
+   instead of building it inline; errors out if the dict is missing.
+3. **Relocations:** Step1 bc-alt temp → `…dict_Ampseq_pilot_062626/temp/`; per-rep Report_line
+   files → `data/<batch>/<OUT_SUBDIR>/reports/` (reports are needed by step 02, so kept, but
+   moved under the respective cDNA project folder). The `cdna_edit_count/` work folder was
+   removed.
+
+**Evidence / pointer.** `qsub/dict_build/12_concatenate_dictionary.qsub`; updated
+`qsub/cdna_edit_count/{config.sh,01_edit_count.qsub,02_cDNA_run_stats.qsub}`. Re-ran the pilot;
+parsed CSVs + stats unchanged.
+
+---
+
 ## 2026-06-23 — Pilot cDNA edit count: per-block dict, multi-variant, separate output
 
 **Context.** First run of part 2 on the pilot dictionary, for the HCT_RAD51C_XRCC3 cDNA
