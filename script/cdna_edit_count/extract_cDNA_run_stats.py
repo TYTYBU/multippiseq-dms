@@ -52,7 +52,7 @@ def sample_name_from_path(filepath: str) -> str:
          -> 'NR-TV_HCT_RAD51C_XRCC3_Rep1'
     """
     basename = os.path.basename(filepath)
-    name = basename.replace(".cDNA_parsed.txt", "")
+    name = basename.replace(".cDNA_parsed.csv", "").replace(".cDNA_parsed.txt", "")
     name = name.rstrip("_")
     return name
 
