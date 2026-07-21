@@ -14,11 +14,12 @@ clean.
   log = "why / when it changed" (dated, append-only).
 - If a fact helps a new session act correctly today → methods file. If it explains
   why we got here → decisions log.
+- All analysis runs on the cluster via `qsub` — never on the login node.
 
 ## Part 1 — Dictionary building
 | File | Role |
 |---|---|
-| [dict_build_analysis_plan.md](dict_build_analysis_plan.md) | Methods + onboarding. Start with its "Status / orientation" block. **Canonical:** Python lineage (`step1_v2.py` → bowtie2 → `step2.py` → `step3.py`), driven by `qsub/dict_build/`. |
+| [dict_build_analysis_plan.md](dict_build_analysis_plan.md) | Methods + onboarding. Start with its "Status / orientation" block. **Canonical:** Python lineage (`step1_v2.py` → bowtie2 → `step2.py` → `step3.py`), driven by `qsub/dict_build/` steps 00–12. Current batch: `multiPPIseq_DMS_dict_071526`, both libtypes, off union-merged reads. |
 | [dict_build_decisions.md](dict_build_decisions.md) | Dated decision log. |
 
 ## Part 2 — cDNA edit count

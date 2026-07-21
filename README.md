@@ -23,6 +23,9 @@ multiPPIseq_DMS_central/
     dict_build_decisions.md       #   dated decision log
     cdna_edit_count_analysis_plan.md  # methods + onboarding — cDNA edit count
     cdna_edit_count_decisions.md      # dated decision log
+  metadata/
+    DMS_fastq_summary.csv         # one row per fastq sample: libtype, location, merge provenance
+    README.md                     #   column meanings + how to read merge provenance
   script/
     dict_build/                   # dictionary-build Python (step1_v2/step2/step3 + diagnostics)
     cdna_edit_count/              # cDNA parse Step1/Step2 + run-stats

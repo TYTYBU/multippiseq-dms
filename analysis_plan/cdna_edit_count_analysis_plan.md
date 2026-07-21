@@ -17,10 +17,13 @@
   `TEMPLATE_SEQ=TATCATAC…TGTAGTACC`; `R1_POST_BC2=ACCTTTCGACCTGCA`;
   `REGEX_MATCH_LEN=8`; `BC1` length 12–15. Override via env before `qsub` (see `config.sh`).
 - **Dictionary:** the **concatenated** dictionary built by dict_build step 12
-  (`barcode_to_variant/<LIBTYPE>/concatenated/<SAMPLE>.barcode_to_variant.csv.gz`) — per-block
-  dicts pooled across the group's genes (NOT the collapsed *combined* dict). A bc1 reused across
-  blocks for different variants is counted toward **every** such variant (15 such bc1 for
-  RAD51C_XRCC3 in the pilot).
+  (`barcode_to_variant/<LIBTYPE>/concatenated/<LABEL>.barcode_to_variant.csv.gz`) — per-block
+  dicts pooled, NOT the collapsed *combined* dict. Step 12 emits both a **per-gene** and a
+  **per-group** label (`COMMD_all`, `RAD51C_XRCC3`, `RAD51D_XRCC2`); pick the label matching
+  the cDNA sample's pooled content. A bc1 reused across blocks for different variants is
+  counted toward **every** such variant (15 such bc1 for RAD51C_XRCC3 in the pilot).
+  Sanity check when choosing a file: a concatenated dict has **no** `*.raw_dict.csv.gz`
+  sibling; if one is present you are looking at a combined dict.
 - **Other outputs:** Step1 bc-alt temp → `…dict_Ampseq_pilot_062626/temp/`; per-rep
   `Report_line` files → `data/<batch>/<OUT_SUBDIR>/reports/`.
 - **Decision history & rationale:** `cdna_edit_count_decisions.md`.

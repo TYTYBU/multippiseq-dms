@@ -5,10 +5,17 @@
 *Load this file to bring a new session up to speed; this block is the current state, the rest is the detailed method.*
 
 - **Canonical pipeline:** `multiPPIseq_DMS_central/qsub/dict_build/` — step-wise SGE
-  job scripts (`00_fastqc` → `05_barcode_to_variant`) sharing `config.sh`, calling the
+  job scripts (`00_fastqc` → `12_concatenate_dictionary`) sharing `config.sh`, calling the
   Python lineage in `multiPPIseq_DMS_central/script/dict_build/` (`step1_v2.py` →
   bowtie2 → `step2.py` → `step3.py`). Decomposed from the legacy
   `qsub_script/multiPPIseq_DMS_build_dict/multiPPIseq_DMS_build_dict_master.qsub`.
+  **Run everything via `qsub`** — never on the login node.
+- **Batch merging:** when a new batch re-sequences a block that earlier batches already
+  covered, the reads are **union-merged per block** before step 00 and the batch is run off
+  `merged_data/<label>/` via the `RAW_PATH` env override (`config.sh` defines
+  `RAW_PATH=${RAW_PATH:-$DATA_PATH/raw_data/$LIBTYPE}`). Merge R1 and R2 in the *same batch
+  order* to preserve mate pairing. Only 2026 batches (032426, 041726, 051526, 062626, 071526)
+  are in scope; 030424 and 121725 used a different dictionary-building scheme and are excluded.
 - **Output:** under `<DATA_PATH>/<stage>/<LIBTYPE>/` — e.g. `fastqc/`, `noAdapter/`,
   `processed_fa/`, `bowtie2_out/`, `variant_mapped/`, `barcode_to_variant/`. Final
   dictionaries: `barcode_to_variant/<LIBTYPE>/*.barcode_to_variant.csv.gz` (per block under
@@ -35,20 +42,39 @@
   support/fidelity come from `DICT_PARAMS_CSV` (`<DATA_PATH>/dictionary_parameters.csv`)
   when present, else the global `MIN_SUPPORT_READS=3`/`MIN_ACCURACY=0.9`. All in
   `qsub/dict_build/config.sh`; override per-batch via env or by editing config.
+- **Cutoffs are library-type specific.** A `dictionary_parameters.csv` derived from one
+  libtype must **not** be applied to the other. **regular** uses the global
+  **3 / 0.9** — achieved by pointing `DICT_PARAMS_CSV` at a nonexistent path so step 05's
+  `[ -f ]` test fails and every block falls back to the config globals. Per-block CSVs are
+  built only for **Dual_NEBuilder**, from that batch's own sweep (steps 07–09).
 - **Library types:** reads come in two construct types — **regular** and
-  **Dual_NEBuilder** — processed separately and namespaced by `LIBTYPE`. (Final dicts of
-  the two types can be merged downstream via `merge_regular_NEbuilder_dicts.pl`.)
+  **Dual_NEBuilder** — processed separately and namespaced by `LIBTYPE`. **Pooling never
+  crosses library types:** steps 10–12 run inside one `<stage>/<LIBTYPE>/` tree, so regular
+  and Dual_NEBuilder blocks are never combined or concatenated together — their preps and
+  per-block cutoffs differ. (Final dicts of the two types can be merged downstream via
+  `merge_regular_NEbuilder_dicts.pl`.)
+- **Grouping rule (steps 10–12), both libtypes:** pool per-**gene** (all blocks of one gene),
+  and additionally per-**group** — `COMMD_all` (COMMD1/5/6/10), `RAD51C_XRCC3`,
+  `RAD51D_XRCC2` (`GENE_GROUPS` in config). Levels with no blocks in the batch are skipped.
 - **Filename convention:** raw fastq must parse as `<GENE>_DMS_<block>_Dictionary_R{1,2}.fastq.gz`
   (a person/type prefix is allowed). `step1_v2.py` parses GENE (uppercase) + block via
   `([^_]+)_DMS_(\d+)_Dictionary`.
+- **Sample inventory:** `multiPPIseq_DMS_central/metadata/DMS_fastq_summary.csv` — one row per
+  fastq sample with libtype, location and **per-block** merge provenance. Consult it before
+  assuming what a batch or a `merged_data/` folder contains.
 - **Decision history & rationale:** `dict_build_decisions.md`.
-- **Status:** Active. Current batch = **Ampseq pilot** (`multiPPIseq_DMS_dict_Ampseq_pilot_062626`,
-  Dual_NEBuilder; genes RAD51C, RAD51D, XRCC2, XRCC3). Steps 00–04 done. Step 05 **block-level
-  only** (`BLOCK_LEVEL_ONLY=1`), bc1-only, regenerated with **tentative per-block thresholds**
-  from `dictionary_parameters.csv` (support 3 for all blocks; fidelity 0.05–0.125 per block).
-  Yield now thousands of barcodes/block (e.g. XRCC3_DMS_3 19,220; RAD51C_DMS_2 4,736).
-  Dictionary diagnostics (06/08/09) rerun against these dictionaries.
-- **Last updated:** 2026-06-23
+- **Status:** Active. Current batch = **`multiPPIseq_DMS_dict_071526`**, both libtypes, run
+  off union-merged reads in `merged_data/`.
+  - **Dual_NEBuilder** (9 blocks: RAD51C 1/2, XRCC3 1/2/3, RAD51D 7/8, XRCC2 6/7) — merged
+    with the 062626 pilot, so *every* block was rebuilt. Trimmed (step 01) per FastQC Adapter
+    Content. Steps 00–04 done; alignment 99.97–99.99%. **Step 05 not yet run — awaiting
+    cutoffs**, since the pilot per-block values were tuned at roughly half the current depth
+    and should be re-read off the merged-data sweep (07–09).
+  - **regular** (13 blocks: COMMD1 1/2, COMMD5 1/2/3, COMMD6 1/2, COMMD10 1/2, RAD51C 3/4,
+    XRCC3 4/5) — merged across 032426+041726+051526+071526; untrimmed (Adapter Content PASS).
+    All 13 blocks rebuilt fresh at the global **3 / 0.9**; alignment 99.66–99.98%. Steps
+    10–12 then build the per-gene and per-group dictionaries.
+- **Last updated:** 2026-07-21
 
 ---
 
@@ -208,24 +234,31 @@ an optional convenience and the whole branch is gated behind `BUILD_COMBINED` (d
 
 ### Step 10 — Combine variant-mapped reads across blocks/genes (optional)
 - **Inputs:** step-04 `variant_mapped/<LIBTYPE>/blocks` per-read CSVs.
-- **Method:** `10_combine_variant_mapped.qsub` concatenates (gzip multi-member; valid) all
-  blocks of the genes in each `GENE_GROUPS` entry (COMMD* together; RAD51D+XRCC2; RAD51C+XRCC3)
-  into one combined variant-mapped file per group, keeping the per-read format and the
-  `_Dictionary.block_ref_seqs.csv.gz` suffix so steps 09/11 consume it unchanged. The variant
-  column keeps its gene prefix (`GENE---variant`) so genes stay distinguishable after merge.
-- **Output:** `variant_mapped/<LIBTYPE>/combined/<group>_DMS_Dictionary.block_ref_seqs.csv.gz`.
+- **Method:** `10_combine_variant_mapped.qsub` concatenates (gzip multi-member; valid) the
+  per-block variant-mapped reads at **two levels**: (a) **per-gene** — all blocks of one gene,
+  with the genes present discovered from the blocks dir; (b) **per-group** — all blocks of the
+  genes in each `GENE_GROUPS` entry (COMMD_all; RAD51D+XRCC2; RAD51C+XRCC3). Output keeps the
+  per-read format and the `_Dictionary.block_ref_seqs.csv.gz` suffix so steps 09/11 consume it
+  unchanged. The variant column keeps its gene prefix (`GENE---variant`) so genes stay
+  distinguishable after merge. Never crosses library types.
+- **Output:** `variant_mapped/<LIBTYPE>/combined/<label>_DMS_Dictionary.block_ref_seqs.csv.gz`,
+  one per gene and one per group.
 - **QC:** run step 09 on the combined dir (`SCATTER_IN_DIR=…/combined`,
   `SCATTER_OUT_DIR=…/support_accuracy_scatter_combined`, `SCATTER_PARAMS_CSV=` to suppress the
   box) to choose per-group cutoffs before building.
 
 ### Step 11 — Build combined dictionaries (optional)
-- **Inputs:** step-10 combined variant-mapped files; per-group cutoffs from
+- **Inputs:** step-10 combined variant-mapped files; cutoffs from
   `DICT_PARAMS_COMBINED_CSV` (`Group,proposed_fidelity_cutoff,proposed_support_read_cutoff`).
-- **Method:** `11_combined_dictionary.qsub` runs step3.py per group, looking up its cutoff by
-  `Group` label (falls back to global `MIN_SUPPORT_READS`/`MIN_ACCURACY` if absent), with
+- **Method:** `11_combined_dictionary.qsub` runs step3.py once per file step 10 emitted —
+  so it covers **both** the per-gene and per-group levels automatically — looking up each
+  label's cutoff (falls back to global `MIN_SUPPORT_READS`/`MIN_ACCURACY` if absent), with
   `IGNORE_BC` (bc1-only).
-- **Output:** `barcode_to_variant/<LIBTYPE>/combined/<group>.barcode_to_variant.csv.gz`
+- **Output:** `barcode_to_variant/<LIBTYPE>/combined/<label>.barcode_to_variant.csv.gz`
   (+ `.raw_dict.csv.gz`).
+- **Identifying a combined dict:** the companion `*.raw_dict.csv.gz` is the signature of a
+  step3 **collapse**. A file with no `raw_dict` sibling is a plain concatenation (step 12).
+  The two are not interchangeable — see below.
 - **Pilot result (support≥3):** `RAD51C_XRCC3` fidelity≥0.125 → 42,475 barcodes;
   `RAD51D_XRCC2` fidelity≥0.0625 → 41,289 barcodes.
 
@@ -235,14 +268,21 @@ sample. Distinct from the *combined* dictionary: not collapsed via step3, so eac
 its own cutoff and a bc1 reused across blocks stays on multiple rows (a cDNA read is later
 counted toward every variant that bc1 maps to).
 
-### Step 12 — Concatenate per-block dictionaries per group
+### Step 12 — Concatenate per-block dictionaries, per gene and per group
 - **Inputs:** the per-block `barcode_to_variant/<LIBTYPE>/blocks/*.barcode_to_variant.csv.gz`;
   groups from `GENE_GROUPS`.
-- **Method:** `12_concatenate_dictionary.qsub` gzip-concatenates each group's per-block dicts
-  (COMMD* together; RAD51D+XRCC2; RAD51C+XRCC3). Groups with no per-block dicts are skipped.
-- **Output:** `barcode_to_variant/<LIBTYPE>/concatenated/<group>.barcode_to_variant.csv.gz`.
+- **Method:** `12_concatenate_dictionary.qsub` gzip-concatenates the per-block dicts at **two
+  levels**: (a) **per-gene**, genes discovered from the blocks dir; (b) **per-group**
+  (COMMD_all; RAD51D+XRCC2; RAD51C+XRCC3). Levels with no per-block dicts are skipped. Never
+  crosses library types.
+- **Output:** `barcode_to_variant/<LIBTYPE>/concatenated/<label>.barcode_to_variant.csv.gz`,
+  one per gene and one per group. No `raw_dict` companion — that absence is what distinguishes
+  a concatenated dict from a combined one.
+- **Cost note:** this is a plain `cat`, so it is always cheap to rebuild. Reuse of prior
+  outputs is worth it for per-block dicts (steps 02–05) and for *combined* dicts (step 11,
+  a real collapse), but never for this step.
 - **Pilot result:** `RAD51C_XRCC3` 47,961 rows (47,946 unique bc1; 15 multi-variant);
-  `RAD51D_XRCC2` 44,168 rows. (COMMD_all skipped — no blocks in this batch.)
+  `RAD51D_XRCC2` 44,168 rows. (COMMD_all skipped — no blocks in that batch.)
 
 ## Notes
 - `--ignore_bc2` (bc1-only) is the **committed Dual_NEBuilder design**, not a defect; the

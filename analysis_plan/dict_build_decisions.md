@@ -4,6 +4,158 @@ Dated, append-only. Newest entries on top. One entry per real decision.
 
 ---
 
+## 2026-07-21 — Regular rebuild validated; the "COMMD was under-powered" premise was wrong
+
+**Context.** Supersedes the factual premise of "Rebuild all 13 regular blocks fresh" below (the
+decision itself stands). That entry asserted the 9 COMMD block dicts copied into `dict_051526`
+were "built on a single batch's reads" and that each would "gain a second source batch" from the
+union merge. The completed rebuild disproves it: **all 9 COMMD blocks came back byte-identical
+to legacy** (COMMD5_1 89 rows, COMMD10_2 39,095 rows, …, delta +0.0% across the board).
+
+**What was actually true.** The copied dicts already came from the `032426+041726` union built in
+`dict_041726` — the correct 2-batch depth. The intersection-merge bug hit
+`032426_041726_051526_merged` only. And 051526/071526 contain **no COMMD regular reads at all**
+(051526 = RAD51C_3/4 + XRCC3_4/5; 071526 = RAD51C_3 + XRCC3_4), so no COMMD block could gain
+depth from this merge regardless. The identical output is the expected result, and it doubles as
+a strong reproducibility check on the rebuilt pipeline.
+
+**Decision.** Keep the fresh rebuild as canonical — the surviving rationale is **provenance**
+(one uniformly-derived set from known inputs), not added depth. Do not carry the "under-powered
+COMMD" claim forward into future planning.
+
+**Evidence / pointer.** Validation vs `dict_051526`: 11 blocks +0.0%, RAD51C_3 8,662 → 12,055
+(+39.2%), XRCC3_4 22,016 → 31,855 (+44.7%) — exactly the two blocks whose `merged_from` includes
+071526. Total shared 175,582 → 188,814 (+7.5%). Acceptance criterion (no block below legacy) met.
+Cutoffs 3 / 0.9 throughout; step 02 confirmed 13/13 blocks.
+
+---
+
+## 2026-07-21 — Check job exit status, not just output presence, before chaining
+
+**Context.** During the regular build, step 02 job 234752 was killed by a `qdel` (`exit_status 137`,
+`ru_wallclock 65s`) after completing only **5 of 13** blocks. The remaining 8 left truncated FASTA
+files behind. Steps 03/04/05 then ran without error — each step globs whatever is in its input
+directory, so partial input produces partial output silently, and a full set of plausible-looking
+dictionaries appeared at the end.
+
+**Decision.** After any step, verify the job **exited cleanly** (`qacct -j <id>` → `exit_status 0`)
+and that the expected per-block count is present — file existence alone is not evidence of
+completion. Steps 02 and 05 log a block count for exactly this purpose.
+
+**Evidence / pointer.** Detected by the validation table, not by any step: RAD51C_4 came in −37.5%
+and XRCC3_5 −56.3% against legacy. **Barcode counts must never fall when reads are added** — that
+invariant is the cheapest tripwire available and is why the validation step compares against the
+previous build. Recovery: cleared `processed_fa/`, `bowtie2_out/`, `variant_mapped/`,
+`barcode_to_variant/` for regular and resubmitted the whole chain (jobs 234771–234778).
+
+---
+
+## 2026-07-21 — Rebuild all 13 regular blocks fresh; do not copy COMMD forward from 051526
+
+**Context.** The plan for the 071526 regular build was to recompute only the two blocks with
+new data (RAD51C_3, XRCC3_4) and copy the other 11 per-block dicts from
+`dict_051526/barcode_to_variant/regular/blocks`, treating that as "all regular dictionaries
+before today." Tracing provenance showed that set is not uniformly derived:
+`dict_051526/raw_data/regular` and `dict_051526/variant_mapped/regular/blocks` both contain
+**only** RAD51C_3/4 and XRCC3_4/5 — its 9 COMMD block dicts were never computed there, they
+were copied in from an earlier batch and built on a single batch's reads. COMMD reads exist in
+**both** 032426 and 041726; the legacy intersection-only merge (see entry below) is exactly why
+they were never pooled.
+
+**Decision.** Build **all 13** regular blocks fresh from the union merge
+(032426+041726+051526+071526). The copy shortcut was only ever a compute saving, and here it
+would have meant discarding a better dictionary to reuse an under-powered one — every COMMD
+block gains a second source batch (except COMMD5_1, which exists only in 032426). Steps 10–12
+therefore also build `COMMD_all` from genuinely pooled reads rather than inheriting it.
+
+**Evidence / pointer.** Copy jobs 234763/234765/234768 cancelled. Note the ordering hazard when
+undoing a chain: in SGE, deleting a job that others `-hold_jid` on **releases** its dependents
+immediately, so dependencies were re-pointed with `qalter -hold_jid` *before* deletion to stop
+step 12 firing ahead of step 05. Final chain 04 → 05 → 12 → 10 → 11.
+
+---
+
+## 2026-07-21 — Merge reads across 2026 batches before building; 030424 and 121725 excluded
+
+**Context.** Blocks are re-sequenced across batches, so a block's reads are spread over several
+deliveries. The legacy `merge_identical_files.sh` did **intersection-only** merging — it emitted
+a file only when present in *both* sources — which silently dropped all COMMD blocks from
+`dict_051526/032426_041726_051526_merged/regular`, leaving 4 blocks where there should be 13.
+
+**Decision.** Union-merge per block across the 2026 batches (032426, 041726, 051526, 062626,
+071526) into `merged_data/<label>/`, and run the batch off it via the new `RAW_PATH` env
+override. **030424 and 121725 are out of scope** — different dictionary-building scheme.
+R1 and R2 are concatenated in the *same* batch order to preserve mate pairing, and the merge
+job asserts an equal source count for the two mates.
+
+**Evidence / pointer.** `config.sh` changed to `RAW_PATH=${RAW_PATH:-$DATA_PATH/raw_data/$LIBTYPE}`.
+Merge produced 44 files / 23 GB with zero pairing mismatches. Confirmed the gold-standard block
+set (13 regular) matches `dict_051526/barcode_to_variant/regular/blocks`, proving 030424/121725
+were never folded into the canonical build.
+
+---
+
+## 2026-07-21 — Library types were swapped in the 071526 delivery
+
+**Context.** The first 071526 run produced **9 empty regular dictionaries** (header only). Step 02
+showed `oligo_found = 0` for RAD51C 1/2 and XRCC3 1/2/3 despite `barcodes_found` at 49–68% of
+millions of reads — the R2 fixed sequence never matched. Cutadapt retention was 82–98%, ruling
+out trimming as the cause. Tian identified the real reason: the NEBuilder and regular samples had
+been **swapped** in the delivery, and libtype had been assigned from source filenames without
+verifying content.
+
+**Decision.** Swap the two `raw_data/` folders and rerun. Validation: under the original labelling
+*both* groups were unprecedented block sets; after the swap the 9 exactly match the 062626 pilot
+NEBuilder blocks, and RAD51C_3 / XRCC3_4 match prior regular batches.
+
+**Evidence / pointer.** Post-swap step 02 returned `oligo_found` of 32–69% for the NEBuilder blocks
+that had been at zero, and 92–94% for regular RAD51C_3 / XRCC3_4 — confirming references were
+correct all along and only the labelling was wrong. Merged FastQC gave an independent check: today's
+11 files split cleanly 9 FAIL / 2 PASS on Adapter Content along the prep boundary, and XRCC2_7 —
+the one merged NEBuilder file that PASSes — is the one to which today contributed only 1,091 reads,
+i.e. effectively pilot-only. **Lesson: verify libtype from read content, not from filenames.**
+
+---
+
+## 2026-07-21 — Dictionary cutoffs are library-type specific
+
+**Context.** The per-block `dictionary_parameters.csv` cutoffs (fidelity 0.05–0.125) were derived
+from the **Dual_NEBuilder** pilot sweep. Reusing them for regular was proposed as a convenience.
+
+**Decision.** Cutoffs do **not** transfer between library types — the two preps have different
+noise profiles, so a value tuned on NEBuilder is not valid for regular even for the same
+gene/block. **regular uses the global 3 / 0.9**; a per-block CSV is built only for NEBuilder, from
+that batch's own sweep. Mechanically this is enforced by pointing `DICT_PARAMS_CSV` at a
+nonexistent path, so step 05's `[ -f ]` test fails and every block takes the config globals —
+no NEBuilder value is reachable by a regular run.
+
+**Evidence / pointer.** Consistent with `dict_051526`, which has no `dictionary_parameters.csv`
+at all and therefore also ran at 3 / 0.9; its dicts are keyed `bc1_` with empty bc2, matching
+`IGNORE_BC=--ignore_bc2`. Verified in the queued job's `env_list`.
+
+---
+
+## 2026-07-21 — Pool per-gene as well as per-group; never across library types
+
+**Context.** Steps 10 and 12 pooled only at the `GENE_GROUPS` level, so per-gene dictionaries
+(COMMD1, RAD51C, …) were never built by the current pipeline even though earlier batches had them.
+Separately, it was unclear whether regular and NEBuilder blocks of the same gene should be pooled.
+
+**Decision.** Both steps now build **two levels**: per-gene (all blocks of one gene, discovered
+from the blocks dir) and per-group (`COMMD_all`, `RAD51C_XRCC3`, `RAD51D_XRCC2`). Pooling
+**never crosses library types** — both steps run inside a single `<stage>/<LIBTYPE>/` tree, since
+the two preps and their per-block cutoffs differ. Step 11 needed no change: it iterates over
+whatever step 10 emits, so it picks up both levels automatically.
+
+**Evidence / pointer.** Rewrote `10_combine_variant_mapped.qsub` and
+`12_concatenate_dictionary.qsub` around a shared `concat_set`/`combine_set` helper.
+Also clarified an artifact distinction that had caused confusion: a `*.raw_dict.csv.gz` companion
+is the signature of a step3 **collapse**, so the per-gene/group dicts sitting at the top level of
+`dict_051526/barcode_to_variant/regular/` are *combined*-style, **not** concatenations, and are
+not drop-in copies for a `concatenated/` folder.
+
+---
+
 ## 2026-06-23 — Combined dictionaries built but kept optional (cDNA uses per-block)
 
 **Context.** By convention reads are pooled across blocks and across paired genes into
