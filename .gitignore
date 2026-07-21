@@ -15,3 +15,7 @@ ref/dict_build/bowtie2_index/
 
 # Analysis-plan local version snapshots (skill scratch)
 analysis_plan/.duckversions/
+
+# Sample inventory — a data record, not code. It lives here so it sits with the
+# pipeline, but is deliberately untracked; metadata/README.md documents it.
+metadata/DMS_fastq_summary.csv
