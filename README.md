@@ -86,4 +86,5 @@ Outputs go to a separate `cDNA_parsed_<…>/` folder per batch so the canonical
 - **bc1-only keying** (`--ignore_bc2`) is the committed Dual_NEBuilder design.
 - Two conda envs cover everything: `access` (most steps) and `cutadapt` (step 01).
 - **Onboarding:** load the relevant `analysis_plan/*_analysis_plan.md` "Status /
-  orientation" block first; the `*_decisions.md` logs hold the *why/when*.
+  orientation" block first; the `*_decisions.md` logs hold the *why/when*
+  (local-only — gitignored, so not present in a fresh clone).

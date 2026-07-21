@@ -7,6 +7,11 @@ source for the manuscript methods. Where an analysis has accumulated decisions, 
 sibling `*_decisions.md` holds the dated "why/when" log so the methods file stays
 clean.
 
+> **The `*_decisions.md` logs are local-only** — they are the internal lab notebook and are
+> gitignored, so a fresh clone will not have them. The methods files are tracked and are
+> self-sufficient for running the pipeline; the logs only carry the *why*. Back them up with
+> the project, not via the repo.
+
 **Conventions**
 - Keep the analysis name as a specific filename prefix (e.g. `dict_build_*`) so
   files for one analysis sort together in this flat folder.
@@ -20,10 +25,10 @@ clean.
 | File | Role |
 |---|---|
 | [dict_build_analysis_plan.md](dict_build_analysis_plan.md) | Methods + onboarding. Start with its "Status / orientation" block. **Canonical:** Python lineage (`step1_v2.py` → bowtie2 → `step2.py` → `step3.py`), driven by `qsub/dict_build/` steps 00–12. Current batch: `multiPPIseq_DMS_dict_071526`, both libtypes, off union-merged reads. |
-| [dict_build_decisions.md](dict_build_decisions.md) | Dated decision log. |
+| `dict_build_decisions.md` | Dated decision log. **Local-only, not in the repo.** |
 
 ## Part 2 — cDNA edit count
 | File | Role |
 |---|---|
 | [cdna_edit_count_analysis_plan.md](cdna_edit_count_analysis_plan.md) | Methods + onboarding. Applies a barcode→variant dictionary to cDNA reads and counts edits per variant. Driven by `qsub/cdna_edit_count/` → `script/cdna_edit_count/`. |
-| [cdna_edit_count_decisions.md](cdna_edit_count_decisions.md) | Dated decision log. |
+| `cdna_edit_count_decisions.md` | Dated decision log. **Local-only, not in the repo.** |
