@@ -10,10 +10,16 @@
 #$ -wd /net/bgm/sherwood/PPIseq_proj
 #$ -o /net/bgm/sherwood/PPIseq_proj/job_out
 
-# Step 12 — concatenated dictionaries: pool the per-block barcode->variant
-# dictionaries across the genes in each GENE_GROUPS group (COMMD* together;
-# RAD51D+XRCC2; RAD51C+XRCC3) by gzip multi-member concat. This is the
-# dictionary the cDNA edit-count pipeline consumes for a pooled sample.
+# Step 12 — concatenated dictionaries, by gzip multi-member concat of the
+# per-block barcode->variant dictionaries. Two levels are built:
+#   (a) PER-GENE  — all blocks of one gene (e.g. RAD51C = blocks 3,4)
+#   (b) PER-GROUP — all blocks of the genes in each GENE_GROUPS group
+#                   (COMMD_all; RAD51D_XRCC2; RAD51C_XRCC3)
+# These are the dictionaries the cDNA edit-count pipeline consumes.
+#
+# Concatenation NEVER crosses library types: this runs inside a single
+# barcode_to_variant/<LIBTYPE>/ tree, so regular and Dual_NEBuilder blocks are
+# never pooled (their preps and per-block cutoffs differ).
 #
 # Unlike the COMBINED dictionaries (step 11, collapsed via step3 with a single
 # per-group cutoff), the CONCATENATED dictionaries keep each block's own
@@ -28,23 +34,40 @@ BLOCKS_DIR="$BC2VAR_PATH/blocks"
 CONCAT_DIR="$BC2VAR_PATH/concatenated"
 mkdir -p "$CONCAT_DIR"
 
-for group in $GENE_GROUPS; do
-	label="${group%%:*}"
-	genes="${group#*:}"; genes="${genes//,/ }"
-	files=()
-	for g in $genes; do
+# concat_set <label> <gene> [gene...] — pool every block dict of the given
+# gene(s) into <label>.barcode_to_variant.csv.gz; skip if no blocks present.
+concat_set() {
+	local label="$1"; shift
+	local files=() g f
+	for g in "$@"; do
 		for f in "$BLOCKS_DIR"/${g}_DMS_*.barcode_to_variant.csv.gz; do
 			[ -e "$f" ] && files+=("$f")
 		done
 	done
 	if [ ${#files[@]} -eq 0 ]; then
-		echo "group $label ($genes): no per-block dicts in batch; skipping"
-		continue
+		echo "  $label: no per-block dicts in batch; skipping"
+		return 0
 	fi
-	out="$CONCAT_DIR/${label}.barcode_to_variant.csv.gz"
-	echo "group $label: concatenating ${#files[@]} per-block dict(s) -> $out"
-	printf '  %s\n' "${files[@]}"
+	local out="$CONCAT_DIR/${label}.barcode_to_variant.csv.gz"
+	echo "  $label: concatenating ${#files[@]} per-block dict(s) -> $(basename "$out")"
+	printf '      %s\n' "${files[@]##*/}"
 	cat "${files[@]}" > "$out"
+}
+
+# --- (a) per-gene: discover the genes actually present in this libtype -------
+GENES_PRESENT=$(ls -1 "$BLOCKS_DIR"/*_DMS_*.barcode_to_variant.csv.gz 2>/dev/null \
+	| xargs -r -n1 basename | sed -E 's/_DMS_.*//' | sort -u)
+echo "per-gene concatenation (genes present: $(echo $GENES_PRESENT | tr '\n' ' '))"
+for g in $GENES_PRESENT; do
+	concat_set "$g" "$g"
+done
+
+# --- (b) per-group ----------------------------------------------------------
+echo "per-group concatenation"
+for group in $GENE_GROUPS; do
+	label="${group%%:*}"
+	genes="${group#*:}"; genes="${genes//,/ }"
+	concat_set "$label" $genes
 done
 
 echo "concatenated dictionaries done -> $CONCAT_DIR"

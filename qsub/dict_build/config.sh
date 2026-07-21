@@ -28,7 +28,9 @@ BOWTIE2_INDEX=$CENTRAL/ref/dict_build/bowtie2_index/block_ref_seqs_061626
 VARIANT_LIB=$CENTRAL/ref/dict_build/variant_sequence_library_lite_061626.csv
 
 # ---- per-step I/O paths (all namespaced by library type) --------------
-RAW_PATH=$DATA_PATH/raw_data/$LIBTYPE
+# RAW_PATH is overridable so a batch can be run off a merged read set
+# (e.g. merged_data/<label>/) instead of its own raw_data/<libtype>.
+RAW_PATH=${RAW_PATH:-$DATA_PATH/raw_data/$LIBTYPE}
 FASTQC_PATH=$DATA_PATH/fastqc/$LIBTYPE
 NOADAPTER_PATH=$DATA_PATH/noAdapter/$LIBTYPE
 PROCESSED_FA_PATH=$DATA_PATH/processed_fa/$LIBTYPE

@@ -10,12 +10,18 @@
 #$ -wd /net/bgm/sherwood/PPIseq_proj
 #$ -o /net/bgm/sherwood/PPIseq_proj/job_out
 
-# Step 10 — merge per-block variant-mapped reads into combined files, pooling
-# across blocks AND across the genes in each group (GENE_GROUPS, by convention:
-# COMMD* together; RAD51D+XRCC2; RAD51C+XRCC3). gzip concatenation is valid
-# (Python gzip reads multi-member streams). Output keeps the variant_mapped
-# per-read format and the _Dictionary.block_ref_seqs.csv.gz suffix so step 09
-# (scatter) and step 05/step3 (dictionary) can consume it unchanged.
+# Step 10 — merge per-block variant-mapped reads into combined files. Two
+# levels are built, matching step 12:
+#   (a) PER-GENE  — all blocks of one gene (e.g. RAD51C = blocks 3,4)
+#   (b) PER-GROUP — all blocks of the genes in each GENE_GROUPS group
+#                   (COMMD_all; RAD51D_XRCC2; RAD51C_XRCC3)
+# gzip concatenation is valid (Python gzip reads multi-member streams). Output
+# keeps the variant_mapped per-read format and the _Dictionary.block_ref_seqs.csv.gz
+# suffix so step 09 (scatter) and step 05/step3 (dictionary) consume it unchanged.
+# Step 11 collapses whatever this step emits, so it picks up both levels.
+#
+# Pooling NEVER crosses library types: this runs inside one
+# variant_mapped/<LIBTYPE>/ tree.
 
 source /net/bgm/sherwood/PPIseq_proj/multiPPIseq_DMS_central/qsub/dict_build/config.sh
 
@@ -29,23 +35,40 @@ BLOCKS_DIR="$VARIANT_MAPPED_PATH/blocks"
 COMBINED_DIR="$VARIANT_MAPPED_PATH/combined"
 mkdir -p "$COMBINED_DIR"
 
-for group in $GENE_GROUPS; do
-	label="${group%%:*}"
-	genes="${group#*:}"; genes="${genes//,/ }"
-	files=()
-	for g in $genes; do
+# combine_set <label> <gene> [gene...] — pool every block's variant-mapped reads
+# for the given gene(s) into one file; skip if no blocks present in this batch.
+combine_set() {
+	local label="$1"; shift
+	local files=() g f
+	for g in "$@"; do
 		for f in "$BLOCKS_DIR"/*"${g}"_DMS*.block_ref_seqs.csv.gz; do
 			[ -e "$f" ] && files+=("$f")
 		done
 	done
 	if [ ${#files[@]} -eq 0 ]; then
-		echo "group $label ($genes): no matching blocks in batch; skipping"
-		continue
+		echo "  $label: no matching blocks in batch; skipping"
+		return 0
 	fi
-	out="$COMBINED_DIR/${label}_DMS_Dictionary.block_ref_seqs.csv.gz"
-	echo "group $label: merging ${#files[@]} block file(s) -> $out"
-	printf '  %s\n' "${files[@]}"
+	local out="$COMBINED_DIR/${label}_DMS_Dictionary.block_ref_seqs.csv.gz"
+	echo "  $label: merging ${#files[@]} block file(s) -> $(basename "$out")"
+	printf '      %s\n' "${files[@]##*/}"
 	cat "${files[@]}" > "$out"
+}
+
+# --- (a) per-gene: discover the genes actually present in this libtype -------
+GENES_PRESENT=$(ls -1 "$BLOCKS_DIR"/*_DMS*.block_ref_seqs.csv.gz 2>/dev/null \
+	| xargs -r -n1 basename | sed -E 's/^.*__//; s/_DMS.*//' | sort -u)
+echo "per-gene combine (genes present: $(echo $GENES_PRESENT | tr '\n' ' '))"
+for g in $GENES_PRESENT; do
+	combine_set "$g" "$g"
+done
+
+# --- (b) per-group ----------------------------------------------------------
+echo "per-group combine"
+for group in $GENE_GROUPS; do
+	label="${group%%:*}"
+	genes="${group#*:}"; genes="${genes//,/ }"
+	combine_set "$label" $genes
 done
 
 echo "combine done -> $COMBINED_DIR"
