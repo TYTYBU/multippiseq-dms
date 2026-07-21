@@ -61,8 +61,9 @@
   `([^_]+)_DMS_(\d+)_Dictionary`.
 - **Sample inventory:** `multiPPIseq_DMS_central/metadata/DMS_fastq_summary.csv` — one row per
   fastq sample with libtype, location and **per-block** merge provenance. Consult it before
-  assuming what a batch or a `merged_data/` folder contains.
-- **Decision history & rationale:** `dict_build_decisions.md`.
+  assuming what a batch or a `merged_data/` folder contains. Local-only (the whole `metadata/`
+  directory is untracked), so it is absent from a fresh clone.
+- **Decision history & rationale:** `dict_build_decisions.md` (local-only, not in the repo).
 - **Status:** Active. Current batch = **`multiPPIseq_DMS_dict_071526`**, both libtypes, run
   off union-merged reads in `merged_data/`.
   - **Dual_NEBuilder** (9 blocks: RAD51C 1/2, XRCC3 1/2/3, RAD51D 7/8, XRCC2 6/7) — merged

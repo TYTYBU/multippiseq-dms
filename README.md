@@ -18,14 +18,9 @@ The pipeline has two parts:
 ```
 multiPPIseq_DMS_central/
   README.md                       # this file
-  analysis_plan/                  # lab notebook (start at analysis_plan/README.md)
+  analysis_plan/                  # methods specs (start at analysis_plan/README.md)
     dict_build_analysis_plan.md   #   methods + onboarding — dictionary building
-    dict_build_decisions.md       #   dated decision log
     cdna_edit_count_analysis_plan.md  # methods + onboarding — cDNA edit count
-    cdna_edit_count_decisions.md      # dated decision log
-  metadata/
-    DMS_fastq_summary.csv         # one row per fastq sample: libtype, location, merge provenance
-    README.md                     #   column meanings + how to read merge provenance
   script/
     dict_build/                   # dictionary-build Python (step1_v2/step2/step3 + diagnostics)
     cdna_edit_count/              # cDNA parse Step1/Step2 + run-stats
@@ -34,6 +29,12 @@ multiPPIseq_DMS_central/
     cdna_edit_count/              # step-wise SGE job scripts + config.sh
   ref/dict_build/                 # shared refs: r2 fixed-seq, block-ref fasta + bowtie2 index, variant lib
 ```
+
+A working checkout also carries local-only material that is **not tracked** (see
+`.gitignore`): the `analysis_plan/*_decisions.md` logs, and a `metadata/`
+directory holding the fastq sample inventory. Neither is needed to run the
+pipeline — the methods specs above are self-sufficient — and neither is backed
+up by this repo.
 
 Each pipeline's `config.sh` holds the batch-specific knobs (paths, genes,
 parameters); the step scripts source it so they stay generic. Override any value

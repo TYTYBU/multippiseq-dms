@@ -26,7 +26,7 @@
   sibling; if one is present you are looking at a combined dict.
 - **Other outputs:** Step1 bc-alt temp → `…dict_Ampseq_pilot_062626/temp/`; per-rep
   `Report_line` files → `data/<batch>/<OUT_SUBDIR>/reports/`.
-- **Decision history & rationale:** `cdna_edit_count_decisions.md`.
+- **Decision history & rationale:** `cdna_edit_count_decisions.md` (local-only, not in the repo).
 - **Status:** pilot run complete for HCT_RAD51C_XRCC3 (editRate_041726 + editRate_051526).
 - **Last updated:** 2026-06-23
 
