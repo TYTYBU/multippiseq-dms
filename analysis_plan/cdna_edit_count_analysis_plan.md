@@ -16,6 +16,9 @@
 - **Locked parameters:** bc1-only (`--ignore_bc2`); `EDIT_MODE=T2C`;
   `TEMPLATE_SEQ=TATCATAC…TGTAGTACC`; `R1_POST_BC2=ACCTTTCGACCTGCA`;
   `REGEX_MATCH_LEN=8`; `BC1` length 12–15. Override via env before `qsub` (see `config.sh`).
+- **R2 contamination screen:** `R2_FILTER=0` by default (R1-only, the historical behaviour).
+  Set `R2_FILTER=1` only for batches contaminated with dictionary reads — currently
+  **`multiPPIseq_DMS_editRate_071526` only**. See step 01 below.
 - **Dictionary:** the **concatenated** dictionary built by dict_build step 12
   (`barcode_to_variant/<LIBTYPE>/concatenated/<LABEL>.barcode_to_variant.csv.gz`) — per-block
   dicts pooled, NOT the collapsed *combined* dict. Step 12 emits both a **per-gene** and a
@@ -27,8 +30,17 @@
 - **Other outputs:** Step1 bc-alt temp → `…dict_Ampseq_pilot_062626/temp/`; per-rep
   `Report_line` files → `data/<batch>/<OUT_SUBDIR>/reports/`.
 - **Decision history & rationale:** `cdna_edit_count_decisions.md` (local-only, not in the repo).
+- **Input integrity:** cDNA fastqs are **not** assumed intact — two files in `editRate_041726`
+  were silently corrupt in transit and one killed a rep for months without failing the job
+  (fixed; see decisions log 2026-07-22). `gzip -t` a batch before parsing it, and note that
+  step 01 now exits non-zero when any rep dies.
 - **Status:** pilot run complete for HCT_RAD51C_XRCC3 (editRate_041726 + editRate_051526).
-- **Last updated:** 2026-06-23
+  editRate_071526 (X2RD, NEB `RAD51D_XRCC2`) re-run with `R2_FILTER=1` →
+  `cDNA_parsed/Dual_NEBuilder_r2filtered/` (12 samples, 2026-07-22). Contamination is
+  **per-sample**: PPIseq_regular rep1–3 and anti-myc_regular rep1 are 45–56% dictionary reads;
+  the other 8 samples are ≤0.5%. **Use the `_r2filtered/` tables for 071526**; the unfiltered
+  `Dual_NEBuilder/` is kept only as the before/after baseline.
+- **Last updated:** 2026-07-22
 
 ---
 
@@ -37,7 +49,9 @@
 ### Step 01 — Count edits in cDNA samples (`01_edit_count.qsub`)
 - **Inputs:** the concatenated dictionary
   `barcode_to_variant/<LIBTYPE>/concatenated/<SAMPLE>.barcode_to_variant.csv.gz` (dict_build
-  step 12); cDNA R1 fastqs `data/<batch>/raw_data/*<SAMPLE_GLOB>*_R1.fastq.gz`.
+  step 12); cDNA R1 fastqs `data/<batch>/raw_data/*<SAMPLE_GLOB>*_R1.fastq.gz`. With
+  `R2_FILTER=1`, the matching `_R2.fastq.gz` and the block fixed-seq table
+  `ref/dict_build/r2_fixed_seq_061626.csv` as well.
 - **Method:**
   1. **Step1** (`cDNA_parse_step1.py`) — expand every dictionary barcode into all edited
      (T→C) alt-barcode forms → `…dict_Ampseq_pilot_062626/temp/<SAMPLE>.bc1_alts.txt`
@@ -48,6 +62,19 @@
      bc1 (via the alt table) to the dictionary and credit the read to **all** variants that bc1
      maps to. Writes `<rep>.cDNA_parsed.csv`; prints one `Report_line` to stdout, captured under
      `data/<batch>/<OUT_SUBDIR>/reports/<rep>.report.txt`.
+  3. **R2 screen** (`R2_FILTER=1` only) — read R2 in lockstep with R1 and drop the pair unless
+     R2 is R1's reverse mate. A pair is kept when R2 (a) contains **no** dictionary block fixed
+     sequence and (b) starts (offset 0–2) with the reverse complement of `R1_POST_BC2`. That
+     anchor is **derived in-script** from `R1_POST_BC2` + `EDIT_MODE`, wildcarding the positions
+     an edit can change on the reverse strand (T2C → `rc(ACCTTTCGACCTGCA)` = `TGCAGGTCGAAAGGT`
+     → `TGC.GGTCG...GGT`); a literal RC would match only *unedited* reads and bias the edit rate
+     down. Rejects are counted separately as `dict` (contamination) vs `no_anchor` (adapter
+     dimer / short insert), so the ~5–11% dimer background is never reported as contamination.
+     `Total reads` still counts every pair, so the screen is visible in the stats rather than
+     hidden. Mismatched/truncated R1–R2 pairs abort the rep.
+- **Failure semantics:** reps run concurrently; each PID is waited on individually and the job
+  exits non-zero if any rep fails. A bare `wait` returns 0 even when a child died, which once let
+  a corrupt-fastq rep fail silently while step 02 summarized only the survivors.
 - **Output:** `data/<batch>/<OUT_SUBDIR>/<rep>.cDNA_parsed.csv` — columns
   `Outcome  Total_reads  Is_edited  Any_edit_ct  Pos<N>…` (one row per variant, one Pos column
   per editable template position).
@@ -60,8 +87,13 @@
   basenames repeat across batches, so one CSV each avoids index collisions). Chain after
   step 01 with `qsub -hold_jid <01_jobid>`.
 - **Output:** `data/<batch>/<OUT_SUBDIR>/cDNA_diagnosis_stats_dictPilot062626.csv`:
-  Total reads, Reads with barcode matched, Reads with template matched, Reads with barcode and
-  template matched, Unique barcodes in cDNA samples, Unique barcodes matched in dictionary.
+  Dictionary type, Dictionary name, Total reads, Reads with barcode matched, Reads with template
+  matched, Reads with barcode and template matched, Unique barcodes in cDNA samples, Unique
+  barcodes matched in dictionary. Two further columns — Read pairs screened on R2, Read pairs
+  rejected as dictionary contamination — appear **only** when the batch was run with
+  `R2_FILTER=1`, so unscreened batches' CSVs keep their original shape.
+  Dictionary type/name are read off `DICT_FILE`'s path (not `LIBTYPE`/`SAMPLE`) so the recorded
+  columns cannot drift from the dictionary step 01 actually used.
 - **Rationale:** QC of *applying* the dictionary to cDNA — distinct from the dictionary-**build**
   diagnostics (dict_build steps 06–09).
 

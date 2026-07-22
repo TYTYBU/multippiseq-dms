@@ -35,9 +35,12 @@ for batch in $EDITRATE_BATCHES; do
 	cat "${reports[@]}" > "$combined"
 	out_csv="$PROJ_PATH/data/$batch/$OUT_SUBDIR/$STATS_CSV_NAME"
 	echo "$batch: $((${#reports[@]})) rep(s) -> $out_csv"
+	# Dictionary type/name come from $DICT_FILE rather than $LIBTYPE/$SAMPLE so the
+	# recorded columns cannot drift from the dictionary step 01 actually parsed against.
 	python "$SCRIPT_PATH/extract_cDNA_run_stats.py" \
 		"$combined" \
-		--out_csv "$out_csv"
+		--out_csv "$out_csv" \
+		--dict_file "$DICT_FILE"
 done
 
 echo "cDNA run-stats done."

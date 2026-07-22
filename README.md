@@ -82,6 +82,14 @@ reads. Edit `qsub/cdna_edit_count/config.sh` for the sample/batches.
 Outputs go to a separate `cDNA_parsed_<…>/` folder per batch so the canonical
 `cDNA_parsed/` is untouched.
 
+**R2 contamination screen.** Parsing is R1-only by default. Set `R2_FILTER=1` for a
+batch whose cDNA library is contaminated with dictionary reads (currently
+`editRate_071526` only): step 01 then reads R2 alongside R1 and keeps a pair only if
+R2 is R1's reverse mate — no dictionary block fixed sequence, and starting with the
+reverse complement of `R1_POST_BC2` (derived in-script, with edit-variable positions
+wildcarded so edited reads are not preferentially discarded). Contamination and
+adapter-dimer rejects are counted separately and reported as extra stats columns.
+
 ## Conventions
 
 - **bc1-only keying** (`--ignore_bc2`) is the committed Dual_NEBuilder design.

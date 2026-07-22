@@ -47,3 +47,14 @@ BC1_MIN_LEN=${BC1_MIN_LEN:-12}
 BC1_MAX_LEN=${BC1_MAX_LEN:-15}
 # Barcode keying: bc1-only (committed Dual_NEBuilder design); matches the dict.
 IGNORE_BC=${IGNORE_BC:---ignore_bc2}
+# ---- R2 dictionary-contamination screen (step 01) ---------------------
+# Off by default. Set R2_FILTER=1 for batches contaminated with dictionary reads
+# (known: multiPPIseq_DMS_editRate_071526). Step 01 then also reads R2 and keeps
+# only pairs whose R2 is R1's reverse mate: it must start with the reverse
+# complement of R1_POST_BC2 (derived in-script from R1_POST_BC2 + EDIT_MODE, with
+# the editable positions wildcarded) and must not contain any dictionary block
+# fixed sequence. Measured on gold-standard data 2026-07-22: 0.00% of true
+# dictionary reads pass the screen, 0.00% of true cDNA reads are rejected by the
+# fixed-seq clause.
+R2_FILTER=${R2_FILTER:-0}
+R2_FIXED_SEQ_LIB=${R2_FIXED_SEQ_LIB:-$CENTRAL/ref/dict_build/r2_fixed_seq_061626.csv}

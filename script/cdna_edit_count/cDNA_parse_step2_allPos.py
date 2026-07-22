@@ -75,6 +75,26 @@ parser.add_argument(
     help='Optional R1 sequence after bc2; first regex_match_len bases form an anchor regex. '
     'If set, bc2 is taken from the read between the end of cDNA and this anchor.',
 )
+parser.add_argument(
+    '--cDNA_in_r2',
+    default=None,
+    help='cDNA R2.fastq (can be gzipped). Optional. When given, each read PAIR is screened for '
+    'dictionary-library contamination before parsing: a genuine cDNA R2 is just the reverse '
+    'mate of R1, so it must start with the reverse complement of --r1_post_bc2. '
+    'Requires --r1_post_bc2.',
+)
+parser.add_argument(
+    '--r2_anchor_max_offset',
+    type=int,
+    default=2,
+    help='How far into R2 the reverse-complement anchor may start (default: 2)',
+)
+parser.add_argument(
+    '--r2_fixed_seq_lib',
+    default=None,
+    help='Optional dictionary R2 fixed-sequence CSV (gene,block,r2_fixed_seq). Read pairs whose R2 '
+    'contains any of these are dictionary reads and are discarded. Used with --cDNA_in_r2.',
+)
 parser.add_argument('--bc1_min_len', type=int, default=None, help='Minimum bc1 length (inclusive)')
 parser.add_argument('--bc1_max_len', type=int, default=None, help='Maximum bc1 length (inclusive)')
 parser.add_argument('--bc2_set_len', type=int, default=None, help='Exact bc2 length (mutually exclusive with --bc2_min_len/--bc2_max_len)')
@@ -148,6 +168,76 @@ if r1_post_bc2:
     )
 else:
     post_bc2_regex = None
+
+# ---------------------------------------------------------------------------
+# R2 contamination screen (optional; enabled by --cDNA_in_r2)
+#
+# A genuine cDNA read pair is a short barcode amplicon, so R2 is simply R1's
+# reverse mate: [1nt][rc(r1_post_bc2)][rc(bc2)][rc(template)][rc(bc1)][adapter].
+# A dictionary read pair instead carries the oligo on R2, behind a block-specific
+# fixed sequence. The two are mutually exclusive -- measured at a 0.00% collision
+# rate over 13 gold-standard dictionary blocks (2026-07-22).
+#
+# The anchor is derived from --r1_post_bc2 rather than hard-coded, and the
+# edit-mode wildcarding is carried across the strand: a ref_n->alt_n edit on the
+# forward strand reads as complement(ref_n)->complement(alt_n) on R2, so those
+# positions must be wildcards here too. Matching the literal reverse complement
+# would preferentially reject the most-edited reads and bias the edit rate down.
+# ---------------------------------------------------------------------------
+COMPLEMENT = str.maketrans('ACGTN', 'TGCAN')
+
+
+def reverse_complement(seq):
+    return seq.upper().translate(COMPLEMENT)[::-1]
+
+
+r2_anchor_regex = None
+r2_fixed_seqs = []
+if args.cDNA_in_r2:
+    if not r1_post_bc2:
+        logger.error('--cDNA_in_r2 requires --r1_post_bc2 (the R2 anchor is derived from it)')
+        sys.exit(1)
+    # wildcard the positions that carry the edit, on the reverse strand
+    rc_ref_n = ref_n.translate(COMPLEMENT)
+    r2_anchor_str = reverse_complement(r1_post_bc2).replace(rc_ref_n, '.')
+    r2_anchor_regex = re.compile(r2_anchor_str, re.IGNORECASE)
+    logger.info(
+        'R2 anchor: rc(%s) with %s wildcarded -> %s (allowed start offset 0-%d)',
+        r1_post_bc2, rc_ref_n, r2_anchor_str, args.r2_anchor_max_offset,
+    )
+    if args.r2_fixed_seq_lib:
+        with open(args.r2_fixed_seq_lib) as fh:
+            header = fh.readline()
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split(',')
+                if len(parts) >= 3:
+                    r2_fixed_seqs.append(parts[2].upper())
+        r2_fixed_seqs = sorted(set(r2_fixed_seqs))
+        logger.info('R2 dictionary fixed seqs loaded: %d', len(r2_fixed_seqs))
+
+
+def r2_verdict(seq2):
+    """
+    Classify an R2 read. Returns one of:
+      'cDNA'      -- reverse mate of R1, keep
+      'dict'      -- carries a dictionary block fixed seq: library contamination
+      'no_anchor' -- neither; adapter dimer / short insert / unparseable
+
+    'dict' and 'no_anchor' are counted separately on purpose: on clean cDNA
+    ~10-16% of reads legitimately lack the anchor (adapter dimers, which fail R1
+    parsing anyway), so collapsing them into one counter would report that
+    background as contamination.
+    """
+    for fs in r2_fixed_seqs:
+        if fs in seq2:
+            return 'dict'
+    m = r2_anchor_regex.search(seq2)
+    if m is None or m.start() > args.r2_anchor_max_offset:
+        return 'no_anchor'
+    return 'cDNA'
 
 logger.info(
     'template_len=%d, regex_match_len=%d, head_regex_len=%d, tail_regex_len=%d',
@@ -340,7 +430,20 @@ else:
         logger.error("can't open {}: {}".format(infile2, e))
         sys.exit(1)
 
+# R2 handle for the contamination screen (optional)
+f_in3 = None
+if args.cDNA_in_r2:
+    try:
+        f_in3 = (gzip.open(args.cDNA_in_r2, 'rt') if args.cDNA_in_r2.endswith('.gz')
+                 else open(args.cDNA_in_r2, 'r'))
+    except IOError as e:
+        logger.error("can't open R2 {}: {}".format(args.cDNA_in_r2, e))
+        sys.exit(1)
+
 total_reads = 0
+reads_r2_screened = 0
+reads_r2_dict = 0
+reads_r2_no_anchor = 0
 reads_cDNA_pass = 0
 reads_barcode_found = 0
 reads_cDNA_pass_barcode_found = 0
@@ -359,6 +462,24 @@ while True:
         break
     seq = lines[1].rstrip('\n')
     total_reads += 1
+
+    # Screen the read PAIR before parsing R1: discard dictionary-library reads.
+    if f_in3 is not None:
+        lines2 = list(islice(f_in3, 4))
+        if len(lines2) < 4:
+            logger.error(
+                'R2 exhausted at read %d while R1 continues -- the fastqs are not a '
+                'matched pair (truncated or mismatched file?). Aborting.', total_reads,
+            )
+            sys.exit(1)
+        reads_r2_screened += 1
+        verdict = r2_verdict(lines2[1].rstrip('\n'))
+        if verdict != 'cDNA':
+            if verdict == 'dict':
+                reads_r2_dict += 1
+            else:
+                reads_r2_no_anchor += 1
+            continue
     
     # Anchor cDNA with template start/end regex; slice length equals template_len
     match = head_regex.search(seq)
@@ -452,6 +573,23 @@ while True:
         start_time = time.time()
 
 f_in2.close()
+if f_in3 is not None:
+    # R1 ended first: if R2 still has reads the two files are not a matched pair
+    if list(islice(f_in3, 4)):
+        logger.error(
+            'R1 exhausted at read %d but R2 has more reads -- the fastqs are not a '
+            'matched pair. Aborting.', total_reads,
+        )
+        sys.exit(1)
+    f_in3.close()
+    logger.info(
+        'R2 screen: %d of %d pairs = dictionary contamination (%.2f%%); '
+        '%d lacked the anchor (%.2f%%, adapter dimers etc.)',
+        reads_r2_dict, reads_r2_screened,
+        100.0 * reads_r2_dict / reads_r2_screened if reads_r2_screened else 0.0,
+        reads_r2_no_anchor,
+        100.0 * reads_r2_no_anchor / reads_r2_screened if reads_r2_screened else 0.0,
+    )
 
 # Write output file
 try:
@@ -479,12 +617,17 @@ read_bc_pair = len(read_dict)
 read_bc_pair_in_dict = sum(read_dict.values())
 
 # cDNA analysis report line
-print("Report_line\t{}\tReads_total\t{}\tReads_barcode_matched\t{}\tReads_all_edit_pos_found\t{}\tReads_all_edit_pos_found_barcode_matched\t{}\tBarcodes\t{}\tBarcodes_matched\t{}".format(
+# The two R2-screen fields are always emitted (0 when --cDNA_in_r2 was not used) so the
+# Report_line schema stays fixed; step 02 only surfaces them when the screen actually ran.
+print("Report_line\t{}\tReads_total\t{}\tReads_barcode_matched\t{}\tReads_all_edit_pos_found\t{}\tReads_all_edit_pos_found_barcode_matched\t{}\tBarcodes\t{}\tBarcodes_matched\t{}\tReads_r2_screened\t{}\tReads_r2_dict_contam\t{}\tReads_r2_no_anchor\t{}".format(
     out_file,
     total_reads,
     reads_barcode_found,
     reads_cDNA_pass,
     reads_cDNA_pass_barcode_found,
     read_bc_pair,
-    read_bc_pair_in_dict
+    read_bc_pair_in_dict,
+    reads_r2_screened,
+    reads_r2_dict,
+    reads_r2_no_anchor
 ))

@@ -30,5 +30,5 @@ clean.
 ## Part 2 — cDNA edit count
 | File | Role |
 |---|---|
-| [cdna_edit_count_analysis_plan.md](cdna_edit_count_analysis_plan.md) | Methods + onboarding. Applies a barcode→variant dictionary to cDNA reads and counts edits per variant. Driven by `qsub/cdna_edit_count/` → `script/cdna_edit_count/`. |
+| [cdna_edit_count_analysis_plan.md](cdna_edit_count_analysis_plan.md) | Methods + onboarding. Applies a barcode→variant dictionary to cDNA reads and counts edits per variant. Driven by `qsub/cdna_edit_count/` → `script/cdna_edit_count/`. R1-only by default; `R2_FILTER=1` adds an R2 screen for dictionary contamination (needed for `editRate_071526`). |
 | `cdna_edit_count_decisions.md` | Dated decision log. **Local-only, not in the repo.** |

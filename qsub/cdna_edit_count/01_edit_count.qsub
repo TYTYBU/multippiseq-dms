@@ -31,13 +31,23 @@ fi
 mkdir -p "$TEMP_DIR"
 
 # --- (a) Step1: infer all possible edited barcodes from the dictionary -
-python "$SCRIPT_PATH/cDNA_parse_step1.py" \
+if ! python "$SCRIPT_PATH/cDNA_parse_step1.py" \
 	--dict_in "$DICT_FILE" \
 	--edit_mode "$EDIT_MODE" \
 	--out_prefix "$TEMP_DIR/$SAMPLE" \
 	$IGNORE_BC
+then
+	echo "ERROR: Step1 (barcode expansion) failed; not parsing any reps." >&2
+	exit 1
+fi
 
 # --- (b) Step2: count edits per cDNA rep, per batch -------------------
+# Reps run concurrently, so each PID is recorded and waited on individually
+# below: a bare `wait` returns 0 even when a child died, which once let a
+# rep with a corrupt input fastq fail silently for months (see decisions log,
+# 2026-07-22). Note `wait -n` is unavailable on this host's bash.
+PIDS=()
+LABELS=()
 for batch in $EDITRATE_BATCHES; do
 	RAW="$PROJ_PATH/data/$batch/raw_data"
 	OUT="$PROJ_PATH/data/$batch/$OUT_SUBDIR"
@@ -46,9 +56,21 @@ for batch in $EDITRATE_BATCHES; do
 	shopt -s nullglob
 	for f in "$RAW"/*"$SAMPLE_GLOB"*_R1.fastq.gz; do
 		f2=$(basename "$f" _R1.fastq.gz)
+		# R2 contamination screen (opt-in via R2_FILTER=1). Only 071526 is known to be
+		# contaminated with dictionary reads; clean batches are left bit-identical.
+		r2_args=()
+		if [ "${R2_FILTER:-0}" = "1" ]; then
+			r2="${f%_R1.fastq.gz}_R2.fastq.gz"
+			if [ ! -f "$r2" ]; then
+				echo "ERROR: R2_FILTER=1 but no R2 for $f2 (expected $r2)" >&2
+				exit 1
+			fi
+			r2_args=(--cDNA_in_r2 "$r2" --r2_fixed_seq_lib "$R2_FIXED_SEQ_LIB")
+		fi
 		echo "Parsing $batch / $f2"
 		python "$SCRIPT_PATH/cDNA_parse_step2_allPos.py" \
 			--cDNA_in "$f" \
+			"${r2_args[@]}" \
 			--dict_in "$DICT_FILE" \
 			--bc_alt_prefix "$TEMP_DIR/$SAMPLE" \
 			--out "$OUT/${f2}.cDNA_parsed.csv" \
@@ -60,9 +82,32 @@ for batch in $EDITRATE_BATCHES; do
 			--bc1_max_len "$BC1_MAX_LEN" \
 			$IGNORE_BC \
 			> "$REPORTS/${f2}.report.txt" &
+		PIDS+=($!)
+		LABELS+=("$batch / $f2")
 	done
 	shopt -u nullglob
 done
-wait
 
-echo "cDNA edit count done. parsed + reports -> data/<batch>/$OUT_SUBDIR"
+if [ "${#PIDS[@]}" -eq 0 ]; then
+	echo "ERROR: no R1 fastqs matched *${SAMPLE_GLOB}*_R1.fastq.gz in any batch." >&2
+	exit 1
+fi
+
+failed=0
+for i in "${!PIDS[@]}"; do
+	if wait "${PIDS[$i]}"; then
+		:
+	else
+		status=$?
+		echo "ERROR: rep failed (exit $status): ${LABELS[$i]}" >&2
+		failed=$((failed + 1))
+	fi
+done
+
+if [ "$failed" -gt 0 ]; then
+	echo "ERROR: $failed of ${#PIDS[@]} rep(s) failed; stats (step 02) would silently" >&2
+	echo "       summarize only the survivors. Check the input fastqs (gzip -t) first." >&2
+	exit 1
+fi
+
+echo "cDNA edit count done: ${#PIDS[@]} rep(s). parsed + reports -> data/<batch>/$OUT_SUBDIR"
