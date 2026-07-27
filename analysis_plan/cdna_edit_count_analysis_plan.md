@@ -19,6 +19,12 @@
 - **R2 contamination screen:** `R2_FILTER=0` by default (R1-only, the historical behaviour).
   Set `R2_FILTER=1` only for batches contaminated with dictionary reads — currently
   **`multiPPIseq_DMS_editRate_071526` only**. See step 01 below.
+- **Primary edit position:** `PRIMARY_POS=14` (1-based, in the edit template) — the on-target
+  base-editing site, surfaced per variant as `Primary_pos`/`Primary_edit_ct` and highlighted in
+  the per-sample plot. Verified: across all 32 cDNA parses the auto-detected primary was 14 in
+  **100%** of samples (44–62% of edits vs ≤13% runner-up). **`PRIMARY_POS` is tied to the current
+  `TEMPLATE_SEQ`** — if the template changes, re-derive it (run once with `PRIMARY_POS=` empty and
+  read the logged auto-detected value) before re-pinning.
 - **Dictionary:** the **concatenated** dictionary built by dict_build step 12
   (`barcode_to_variant/<LIBTYPE>/concatenated/<LABEL>.barcode_to_variant.csv.gz`) — per-block
   dicts pooled, NOT the collapsed *combined* dict. Step 12 emits both a **per-gene** and a
@@ -34,13 +40,19 @@
   were silently corrupt in transit and one killed a rep for months without failing the job
   (fixed; see decisions log 2026-07-22). `gzip -t` a batch before parsing it, and note that
   step 01 now exits non-zero when any rep dies.
-- **Status:** pilot run complete for HCT_RAD51C_XRCC3 (editRate_041726 + editRate_051526).
-  editRate_071526 (X2RD, NEB `RAD51D_XRCC2`) re-run with `R2_FILTER=1` →
-  `cDNA_parsed/Dual_NEBuilder_r2filtered/` (12 samples, 2026-07-22). Contamination is
-  **per-sample**: PPIseq_regular rep1–3 and anti-myc_regular rep1 are 45–56% dictionary reads;
-  the other 8 samples are ≤0.5%. **Use the `_r2filtered/` tables for 071526**; the unfiltered
-  `Dual_NEBuilder/` is kept only as the before/after baseline.
-- **Last updated:** 2026-07-22
+- **Status:** all 24 biological cDNA samples reprocessed 2026-07-27 with the updated pipeline
+  (primary position + plots). Canonical (sample × dictionary) parses, per the committed mapping:
+  - **regular `RAD51C_XRCC3`** — 041726 (HCT+U2OS) + 051526 (HCT; no U2OS in that batch) →
+    `cDNA_parsed/regular_primaryPos/` (12 samples).
+  - **NEBuilder `RAD51C_XRCC3`** — 041726 + 051526, **HCT only** →
+    `cDNA_parsed/Dual_NEBuilder_primaryPos/` (8 samples).
+  - **NEBuilder `RAD51D_XRCC2`** — 071526, all X2RD samples, `R2_FILTER=1` →
+    `cDNA_parsed/Dual_NEBuilder_r2filtered/` (12 samples). 071526 contamination is **per-sample**:
+    PPIseq_regular rep1–3 and anti-myc_regular rep1 are 45–56% dictionary reads; the other 8 are
+    ≤0.5%. Use the `_r2filtered/` tables; the unfiltered `Dual_NEBuilder/` is the baseline only.
+  - RAD51C_XRCC3 cDNA is **regular** libtype (regular dict matches better: 24% vs 18% barcode
+    match); it is parsed against both dicts as a comparison, U2OS against regular only.
+- **Last updated:** 2026-07-27
 
 ---
 
@@ -72,12 +84,18 @@
      dimer / short insert), so the ~5–11% dimer background is never reported as contamination.
      `Total reads` still counts every pair, so the screen is visible in the stats rather than
      hidden. Mismatched/truncated R1–R2 pairs abort the rep.
+  4. **Per-sample plot** (`plot_edit_positions.py`) — after every rep succeeds, one QC bar plot
+     per parsed CSV: total edit events per editable template position (summed over variants),
+     with `Primary_pos` highlighted → `data/<batch>/<OUT_SUBDIR>/plot/<rep>.edit_positions.png`.
+     Runs as a post-pass over the CSVs, so a plot folder never reflects a partially-failed batch.
 - **Failure semantics:** reps run concurrently; each PID is waited on individually and the job
   exits non-zero if any rep fails. A bare `wait` returns 0 even when a child died, which once let
   a corrupt-fastq rep fail silently while step 02 summarized only the survivors.
 - **Output:** `data/<batch>/<OUT_SUBDIR>/<rep>.cDNA_parsed.csv` — columns
-  `Outcome  Total_reads  Is_edited  Any_edit_ct  Pos<N>…` (one row per variant, one Pos column
-  per editable template position).
+  `Outcome  Total_reads  Is_edited  Any_edit_ct  Primary_pos  Primary_edit_ct  Pos<N>…` (one row
+  per variant, one Pos column per editable template position). `Primary_edit_ct` is the read count
+  edited at `Primary_pos` — i.e. it equals that row's `Pos<Primary_pos>` cell, surfaced up front.
+  `Primary_pos` is constant within a file (from `PRIMARY_POS`, or auto-detected when unset).
 - **Rationale:** edits are scored at every template T position so per-position editing can be
   profiled; bc1-only matching mirrors the committed dictionary keying.
 

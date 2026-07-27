@@ -67,10 +67,17 @@ for batch in $EDITRATE_BATCHES; do
 			fi
 			r2_args=(--cDNA_in_r2 "$r2" --r2_fixed_seq_lib "$R2_FIXED_SEQ_LIB")
 		fi
+		# Primary edit position: pin it from config if set, else let the script
+		# auto-detect (argmax over variants) per sample.
+		primary_args=()
+		if [ -n "${PRIMARY_POS:-}" ]; then
+			primary_args=(--primary_pos "$PRIMARY_POS")
+		fi
 		echo "Parsing $batch / $f2"
 		python "$SCRIPT_PATH/cDNA_parse_step2_allPos.py" \
 			--cDNA_in "$f" \
 			"${r2_args[@]}" \
+			"${primary_args[@]}" \
 			--dict_in "$DICT_FILE" \
 			--bc_alt_prefix "$TEMP_DIR/$SAMPLE" \
 			--out "$OUT/${f2}.cDNA_parsed.csv" \
@@ -110,4 +117,24 @@ if [ "$failed" -gt 0 ]; then
 	exit 1
 fi
 
-echo "cDNA edit count done: ${#PIDS[@]} rep(s). parsed + reports -> data/<batch>/$OUT_SUBDIR"
+# --- (c) Per-sample edit-position bar plots ---------------------------
+# One QC plot per parsed CSV: total edit events per editable template position,
+# with the primary position highlighted. Runs only after every rep succeeded
+# (above), so a plot folder never reflects a partially-failed batch. Plots land in
+# a plot/ subfolder beside the CSVs.
+for batch in $EDITRATE_BATCHES; do
+	OUT="$PROJ_PATH/data/$batch/$OUT_SUBDIR"
+	PLOTS="$OUT/plot"
+	mkdir -p "$PLOTS"
+	shopt -s nullglob
+	for csv in "$OUT"/*.cDNA_parsed.csv; do
+		rep=$(basename "$csv" .cDNA_parsed.csv)
+		python "$SCRIPT_PATH/plot_edit_positions.py" \
+			--in_csv "$csv" \
+			--out_png "$PLOTS/${rep}.edit_positions.png" \
+			|| echo "WARNING: plot failed for $batch / $rep" >&2
+	done
+	shopt -u nullglob
+done
+
+echo "cDNA edit count done: ${#PIDS[@]} rep(s). parsed + reports + plots -> data/<batch>/$OUT_SUBDIR"

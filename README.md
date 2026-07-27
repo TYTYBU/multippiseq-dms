@@ -76,7 +76,7 @@ reads. Edit `qsub/cdna_edit_count/config.sh` for the sample/batches.
 
 | Step | Script | What |
 |------|--------|------|
-| 01 | `01_edit_count.qsub` | Step1 (expand edited barcodes) → Step2 (anchor template, call edits per position, match bc1 → variant, credit a multi-mapping bc1 to every variant). Writes `<rep>.cDNA_parsed.csv` per batch×rep |
+| 01 | `01_edit_count.qsub` | Step1 (expand edited barcodes) → Step2 (anchor template, call edits per position, match bc1 → variant, credit a multi-mapping bc1 to every variant). Writes `<rep>.cDNA_parsed.csv` per batch×rep, then a per-sample edit-position bar plot under `plot/` |
 | 02 | `02_cDNA_run_stats.qsub` | summarize the per-rep `Report_line`s into a `cDNA_diagnosis_stats_*.csv` per batch (chain with `qsub -hold_jid <01_jobid>`) |
 
 Outputs go to a separate `cDNA_parsed_<…>/` folder per batch so the canonical
@@ -89,6 +89,11 @@ R2 is R1's reverse mate — no dictionary block fixed sequence, and starting wit
 reverse complement of `R1_POST_BC2` (derived in-script, with edit-variable positions
 wildcarded so edited reads are not preferentially discarded). Contamination and
 adapter-dimer rejects are counted separately and reported as extra stats columns.
+
+**Primary edit position.** `PRIMARY_POS` (1-based in the edit template; pinned to 14, the
+on-target site) is surfaced per variant as `Primary_pos`/`Primary_edit_ct` and highlighted in
+the per-sample plot. Leave `PRIMARY_POS=` empty to auto-detect (most-edited position); it is
+tied to `TEMPLATE_SEQ`, so re-derive it if the template changes.
 
 ## Conventions
 

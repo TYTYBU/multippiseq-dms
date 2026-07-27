@@ -95,6 +95,16 @@ parser.add_argument(
     help='Optional dictionary R2 fixed-sequence CSV (gene,block,r2_fixed_seq). Read pairs whose R2 '
     'contains any of these are dictionary reads and are discarded. Used with --cDNA_in_r2.',
 )
+parser.add_argument(
+    '--primary_pos',
+    type=int,
+    default=None,
+    help='1-based position IN THE EDIT TEMPLATE of the primary (on-target) edit. Surfaced in the '
+    'output as Primary_pos / Primary_edit_ct (the per-variant read count edited at that position). '
+    'Must be one of the editable positions (a ref-base site); otherwise a hard error. If omitted, '
+    'defaults to the position edited in the most reads summed over all variants -- logged, and NOT '
+    'stable across samples, so pin it explicitly for any multi-sample comparison.',
+)
 parser.add_argument('--bc1_min_len', type=int, default=None, help='Minimum bc1 length (inclusive)')
 parser.add_argument('--bc1_max_len', type=int, default=None, help='Maximum bc1 length (inclusive)')
 parser.add_argument('--bc2_set_len', type=int, default=None, help='Exact bc2 length (mutually exclusive with --bc2_min_len/--bc2_max_len)')
@@ -252,6 +262,16 @@ edit_pos = []
 for i, base in enumerate(template):
     if base == ref_n:
         edit_pos.append(i + 1)  # 1-based position
+
+# Validate the primary edit position now (if given); the default is resolved after
+# the read loop, once per-position totals are known (see 'primary_pos' below).
+primary_pos = args.primary_pos
+if primary_pos is not None and primary_pos not in edit_pos:
+    logger.error(
+        '--primary_pos %d is not an editable position. Editable (%s) positions in this '
+        'template are: %s', primary_pos, bc_edit_mode, edit_pos,
+    )
+    sys.exit(1)
 
 
 def _dict_sep(path: str) -> str:
@@ -598,13 +618,29 @@ except IOError as e:
     logger.error("can't open output file for writing: {}".format(e))
     sys.exit(1)
 
-f_out.write("Outcome,Total_reads,Is_edited,Any_edit_ct")
+# Resolve the primary edit position. If not given, default to the position edited in the
+# most reads summed over all variants (a column-sum argmax over result_dict). Ties break to
+# the earliest (smallest) position. Every passing read is length==template_len, so all edit
+# positions are scored over the same reads and the totals are directly comparable.
+if primary_pos is None:
+    pos_totals = {pos: sum(r['edit_pos'].get(pos, 0) for r in result_dict.values()) for pos in edit_pos}
+    primary_pos = min(edit_pos, key=lambda p: (-pos_totals[p], p)) if edit_pos else None
+    logger.info(
+        '--primary_pos not given; defaulting to most-edited position %s (%s edits across all '
+        'variants). NOT stable across samples -- pin it explicitly for multi-sample comparison.',
+        primary_pos, pos_totals.get(primary_pos, 0) if primary_pos is not None else 0,
+    )
+else:
+    logger.info('primary edit position: %s (user-specified)', primary_pos)
+
+f_out.write("Outcome,Total_reads,Is_edited,Any_edit_ct,Primary_pos,Primary_edit_ct")
 for pos in edit_pos:
     f_out.write(f",Pos{pos}")
 f_out.write("\n")
 
 for outcome in sorted(result_dict.keys()):
-    f_out.write(f"{outcome},{result_dict[outcome]['total']},{result_dict[outcome]['is_edited']},{result_dict[outcome]['any_edited_ct']}")
+    primary_edit_ct = result_dict[outcome]['edit_pos'].get(primary_pos, 0) if primary_pos is not None else 0
+    f_out.write(f"{outcome},{result_dict[outcome]['total']},{result_dict[outcome]['is_edited']},{result_dict[outcome]['any_edited_ct']},{primary_pos},{primary_edit_ct}")
 
     for pos in edit_pos:
         f_out.write(f",{result_dict[outcome]['edit_pos'].get(pos, 0)}")

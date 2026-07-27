@@ -58,3 +58,16 @@ IGNORE_BC=${IGNORE_BC:---ignore_bc2}
 # fixed-seq clause.
 R2_FILTER=${R2_FILTER:-0}
 R2_FIXED_SEQ_LIB=${R2_FIXED_SEQ_LIB:-$CENTRAL/ref/dict_build/r2_fixed_seq_061626.csv}
+
+# ---- primary (on-target) edit position (step 01) ----------------------
+# 1-based position IN THE EDIT TEMPLATE, surfaced per variant as Primary_pos /
+# Primary_edit_ct and highlighted in the per-sample edit-position plot. Pinned to 14:
+# across all 32 cDNA parses (2 cell lines, both dict libtypes, 3 assays, 3 batches) the
+# auto-detected primary was 14 in 100% of samples, carrying 44-62% of edits vs <=13% for
+# the runner-up. Set PRIMARY_POS= (empty) to fall back to per-sample auto-detection
+# (argmax of edits over all variants) -- convenient for a new template, but NOT stable
+# across samples, so pin it for any multi-sample comparison.
+# CAVEAT: 14 is tied to the CURRENT TEMPLATE_SEQ. If TEMPLATE_SEQ changes, both the
+# coordinate system and which position is on-target change -- re-derive PRIMARY_POS
+# (run once with PRIMARY_POS= empty and read the auto-detected value) before re-pinning.
+PRIMARY_POS=${PRIMARY_POS:-14}
