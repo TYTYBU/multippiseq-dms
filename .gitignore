@@ -13,15 +13,13 @@ ref/dict_build/bowtie2_index/
 *.swp
 *~
 
-# Analysis-plan local version snapshots (skill scratch)
-analysis_plan/.duckversions/
+# Local version snapshots (skill scratch)
+.duckversions/
 
-# Sample inventory — a data record, not code. It lives here so it sits with the
-# pipeline, but the whole directory is deliberately untracked (its README
-# documents nothing but the untracked CSV, so it has no reason to ship).
+# Internal lab working directories — kept local, not published with the code.
+#   analysis_plan/  decision logs and planning notes (lab notebook)
+#   method/         methods write-up drafts, plots, supp tables
+#   metadata/       sample inventory (a data record, not code)
+analysis_plan/
+method/
 metadata/
-
-# Decision logs — internal lab notebook, kept local and not published with the
-# code. The methods files (*_analysis_plan.md) are tracked; these are not.
-# Versions committed before 2026-07-21 remain in the git history.
-analysis_plan/*_decisions.md

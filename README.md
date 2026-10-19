@@ -18,9 +18,6 @@ The pipeline has two parts:
 ```
 multiPPIseq_DMS_central/
   README.md                       # this file
-  analysis_plan/                  # methods specs (start at analysis_plan/README.md)
-    dict_build_analysis_plan.md   #   methods + onboarding — dictionary building
-    cdna_edit_count_analysis_plan.md  # methods + onboarding — cDNA edit count
   script/
     dict_build/                   # dictionary-build Python (step1_v2/step2/step3 + diagnostics)
     cdna_edit_count/              # cDNA parse Step1/Step2 + run-stats
@@ -28,13 +25,20 @@ multiPPIseq_DMS_central/
     dict_build/                   # step-wise SGE job scripts + config.sh
     cdna_edit_count/              # step-wise SGE job scripts + config.sh
   ref/dict_build/                 # shared refs: r2 fixed-seq, block-ref fasta + bowtie2 index, variant lib
+  example_data/                   # small bundled datasets + expected output (see example_data/README.md)
+  full_pipeline.ipynb             # runs both halves end-to-end on example_data/, scripts called directly
 ```
 
+To try the pipeline without the full sequencing data, open
+`full_pipeline.ipynb` and run it against the bundled `example_data/`.
+
 A working checkout also carries local-only material that is **not tracked** (see
-`.gitignore`): the `analysis_plan/*_decisions.md` logs, and a `metadata/`
-directory holding the fastq sample inventory. Neither is needed to run the
-pipeline — the methods specs above are self-sufficient — and neither is backed
-up by this repo.
+`.gitignore`) and is not needed to run the pipeline, nor backed up by this repo:
+
+- `analysis_plan/` — methods specs (`*_analysis_plan.md`) and decision logs
+  (`*_decisions.md`): the lab notebook / onboarding material.
+- `method/` — methods write-up drafts, cutoff plots, and supplementary tables.
+- `metadata/` — the fastq sample inventory.
 
 Each pipeline's `config.sh` holds the batch-specific knobs (paths, genes,
 parameters); the step scripts source it so they stay generic. Override any value
@@ -99,6 +103,7 @@ tied to `TEMPLATE_SEQ`, so re-derive it if the template changes.
 
 - **bc1-only keying** (`--ignore_bc2`) is the committed Dual_NEBuilder design.
 - Two conda envs cover everything: `access` (most steps) and `cutadapt` (step 01).
-- **Onboarding:** load the relevant `analysis_plan/*_analysis_plan.md` "Status /
-  orientation" block first; the `*_decisions.md` logs hold the *why/when*
-  (local-only — gitignored, so not present in a fresh clone).
+- **Onboarding:** the methods specs and decision logs live under
+  `analysis_plan/` — load the relevant `*_analysis_plan.md` "Status /
+  orientation" block first; the `*_decisions.md` logs hold the *why/when*. This
+  material is local-only (gitignored), so it is not present in a fresh clone.
