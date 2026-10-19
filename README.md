@@ -1,9 +1,9 @@
 # multiPPIseq_DMS_central
 
-Central code + methods home for the **multiPPIseq DMS** pipeline — Python
-scripts, SGE/qsub job scripts, shared reference libraries, and the analysis plan
-/ lab notebook. Sequencing data lives outside this repo (per-batch
-`multiPPIseq_DMS_dict_*` / `multiPPIseq_DMS_editRate_*` folders).
+Central code home for the **multiPPIseq DMS** pipeline — Python scripts,
+SGE/qsub job scripts, shared reference libraries, and a small runnable example.
+Sequencing data lives outside this repo (per-batch `multiPPIseq_DMS_dict_*` /
+`multiPPIseq_DMS_editRate_*` folders).
 
 The pipeline has two parts:
 
@@ -31,14 +31,6 @@ multiPPIseq_DMS_central/
 
 To try the pipeline without the full sequencing data, open
 `full_pipeline.ipynb` and run it against the bundled `example_data/`.
-
-A working checkout also carries local-only material that is **not tracked** (see
-`.gitignore`) and is not needed to run the pipeline, nor backed up by this repo:
-
-- `analysis_plan/` — methods specs (`*_analysis_plan.md`) and decision logs
-  (`*_decisions.md`): the lab notebook / onboarding material.
-- `method/` — methods write-up drafts, cutoff plots, and supplementary tables.
-- `metadata/` — the fastq sample inventory.
 
 Each pipeline's `config.sh` holds the batch-specific knobs (paths, genes,
 parameters); the step scripts source it so they stay generic. Override any value
@@ -103,7 +95,3 @@ tied to `TEMPLATE_SEQ`, so re-derive it if the template changes.
 
 - **bc1-only keying** (`--ignore_bc2`) is the committed Dual_NEBuilder design.
 - Two conda envs cover everything: `access` (most steps) and `cutadapt` (step 01).
-- **Onboarding:** the methods specs and decision logs live under
-  `analysis_plan/` — load the relevant `*_analysis_plan.md` "Status /
-  orientation" block first; the `*_decisions.md` logs hold the *why/when*. This
-  material is local-only (gitignored), so it is not present in a fresh clone.
